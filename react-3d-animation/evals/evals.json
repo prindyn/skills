@@ -1,0 +1,33 @@
+{
+  "skill_name": "react-3d-animation",
+  "evals": [
+    {
+      "id": 0,
+      "name": "rotating-product-hero",
+      "prompt": "I'm building the landing page for our company's new wireless earbuds. I want a hero section in our React/Vite app where a 3D earbud case slowly rotates and gently floats up and down — like it's hovering. The user should be able to drag to rotate it themselves but when they let go it should drift back to a default angle. I have a `case.glb` file in `public/models/`. Give me the React component (`Hero.jsx`) I can drop in. I haven't installed any 3D packages yet.",
+      "expected_output": "Full Hero.jsx using R3F + drei (PresentationControls or similar), a Float-style hover animation via useFrame, useGLTF for the model, ambient + directional lighting, plus the npm install line for three / @react-three/fiber / @react-three/drei (and maybe @react-spring/three or just the Float helper from drei).",
+      "files": []
+    },
+    {
+      "id": 1,
+      "name": "scroll-driven-glb-character",
+      "prompt": "Hey — I'm working on a Next.js 14 (app router) portfolio site and I want a character model (it's a `robot.glb` with a built-in animation called \"Idle\" baked in) that shows up in a section partway down the page. As the user scrolls through that section, I want the robot's animation timeline to scrub with the scroll position instead of auto-playing on a loop. So scrolling forward plays the animation forward, scrolling back rewinds. Can you write me the component? I'm not sure what packages I need.",
+      "expected_output": "Next.js-aware component (with `\"use client\"`), uses useGLTF + useAnimations from drei, sets up an AnimationMixer that's manually advanced based on scroll progress (not auto-played). Should mention dynamic import with ssr:false or otherwise handle the SSR case. Should give the npm install. Bonus if it explains the trick of action.play() then action.paused = true and using mixer.setTime() based on scroll.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "shader-animated-blob",
+      "prompt": "im trying to recreate that gooey distorting blob effect you see on a lot of design portfolios — like a sphere that wobbles and morphs over time using noise, with a sort of gradient-y purple-to-pink color. Has to be in react. plain react app (CRA, no nextjs). want it to fill a div basically. do i need to write shaders for this or is there an easier way?",
+      "expected_output": "Should offer the easier path first: drei's MeshDistortMaterial with a sphere — a few lines, no GLSL. Then optionally show the custom shader path with shaderMaterial + simplex noise displacement for users who want more control. Should include the gradient color treatment (e.g. via vertexColors, MeshDistortMaterial color prop, or a custom fragment shader). Should mention sizing — the canvas needs a sized parent.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "tool-selection-question",
+      "prompt": "Quick architecture question — we're a 4-person team. Designer wants to build a fancy 3D scene for our marketing landing page (animated icons floating around the headline, click interactions etc) using Spline because she's used it before. Two devs (me + one other) will integrate it into our Remix app. The CTO is worried about bundle size and wants us to use \"plain Three.js\" instead. What's your honest take? Spline vs Three.js vs something else for this case?",
+      "expected_output": "A nuanced recommendation that covers: Spline is a legitimate choice given the designer-led workflow and self-contained interactions; the bundle-size concern is fair but plain Three.js inside React is *worse* than the alternatives because of cleanup/leak issues; React Three Fiber is the proper React-native option if they go the code route; and a concrete recommendation (probably: keep Spline if the designer's iterating, or have her export the Spline scene as a GLB and import via R3F if bundle/perf truly matters). Should NOT just blindly tell them to use R3F regardless of context.",
+      "files": []
+    }
+  ]
+}
