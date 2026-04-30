@@ -1,0 +1,26 @@
+{
+  "skill_name": "profi-brand",
+  "evals": [
+    {
+      "id": 0,
+      "name": "full-brand-greenfield-saas",
+      "prompt": "I'm a solo founder about to start a SaaS for engineering managers — it surfaces patterns in how their team's PR review process is breaking down (review delays, reviewer overload, unmerged PRs blocking work). I want to launch in 6 weeks. I have nothing yet — no name, no domain, no logo, no colors. I need help building the entire brand from scratch. The personality I want: technical, calm, no-nonsense — the opposite of the loud 'developer productivity' tools that scream at you. Customers are eng managers at 50–500-person companies who already feel overwhelmed. Help me get to a complete brand.",
+      "expected_output": "A complete brand kit: 8-15 brand name candidates across multiple naming patterns with rationale and top-3 picks; domain availability strategy with TLD recommendations; full visual identity covering color palette (60-30-10 with hex/RGB/CMYK), typography pair (specific fonts, hierarchy), wordmark direction, photography rules; and a brand-guide structure they can use. Output should be specific (exact hex codes, named fonts) not generic.",
+      "files": []
+    },
+    {
+      "id": 1,
+      "name": "naming-only-bakery",
+      "prompt": "Help me name a small artisan sourdough bakery I'm opening in Portland, OR next spring. Just need name ideas — I'll figure out the rest later. The vibe is unfussy, hand-built, slightly old-world. I trained in France for two years but I don't want it to feel pretentious. I'm picturing wooden countertops, kraft paper, no fancy branding. Customers are food-curious 30-55 year olds who pay $9 for a loaf because they care. Give me real options I can actually use.",
+      "expected_output": "10-15 specific name candidates organized by naming pattern (founder, suggestive, descriptive, etc.) with brief rationale for each, plus a top-3 recommendation. Should flag potential trademark/availability issues for the top picks. Should NOT generate visual identity, since user only asked for naming.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "visual-identity-only-existing-name",
+      "prompt": "I run a financial coaching practice for women in tech who are dealing with sudden equity wealth (IPO, acquisition, RSU vests). The business is called 'Compass & Cairn' — already named, already incorporated, already have the .com. I need help with the visual identity now. Adjectives: trustworthy, considered, quietly luxurious, never flashy. My customers are 30-45 year old senior ICs and managers in tech who've never had this kind of money before and feel out-of-place at traditional wealth management firms. What should the colors, fonts, and logo direction be? Be specific — I want to actually build this, not just talk about it.",
+      "expected_output": "Specific visual identity recommendations: color palette with exact hex/RGB codes following 60-30-10 framework; named typography pair (headline + body) with download sources; wordmark direction for 'Compass & Cairn' (specific case, weight, tracking choices); photography style rules; should NOT spend time on naming or domain. Output should reflect the brand's adjectives (e.g., muted/sophisticated palette rather than playful).",
+      "files": []
+    }
+  ]
+}
