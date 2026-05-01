@@ -1,0 +1,11 @@
+{
+  "workout_type": "rounds_for_time",
+  "movements": [
+    {"name": "", "reps": null, "weight": null, "distance": null, "calories": null}
+  ],
+  "intervals": [
+    {"duration": 0, "type": "work", "repeat": false}
+  ],
+  "ai_interpretation": "<N> rounds for time: <movements>.",
+  "time_cap": null
+}
