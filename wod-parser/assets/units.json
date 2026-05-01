@@ -1,0 +1,29 @@
+{
+  "_comment": "Unit normalization tables for weights and distances. The parser uses these to render the string fields consistently (e.g. always '95 lb', '800 m').",
+  "weight_units": {
+    "lb":  ["lb", "lbs", "pound", "pounds", "#"],
+    "kg":  ["kg", "kgs", "kilo", "kilos", "kilogram", "kilograms"],
+    "pood": ["pood", "poods"]
+  },
+  "pood_to_lb": {
+    "1": 35,
+    "1.5": 53,
+    "2": 70,
+    "2.5": 88,
+    "3": 106
+  },
+  "distance_units": {
+    "m":   ["m", "meter", "meters", "metre", "metres"],
+    "km":  ["km", "kilometer", "kilometers", "k"],
+    "mi":  ["mi", "mile", "miles"],
+    "ft":  ["ft", "foot", "feet", "'"],
+    "yd":  ["yd", "yard", "yards"]
+  },
+  "distance_to_m": {
+    "m": 1,
+    "km": 1000,
+    "mi": 1609,
+    "ft": 0.3048,
+    "yd": 0.9144
+  }
+}
