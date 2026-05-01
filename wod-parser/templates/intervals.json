@@ -1,0 +1,12 @@
+{
+  "workout_type": "intervals",
+  "movements": [
+    {"name": "", "reps": null, "weight": null, "distance": null, "calories": null}
+  ],
+  "intervals": [
+    {"duration": 60, "type": "work", "repeat": true},
+    {"duration": 60, "type": "rest", "repeat": true}
+  ],
+  "ai_interpretation": "Intervals: <work> work / <rest> rest x <rounds>.",
+  "time_cap": 600
+}
