@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "wod-parser-output",
+  "type": "object",
+  "required": ["workout_type", "movements", "intervals", "ai_interpretation", "time_cap"],
+  "additionalProperties": false,
+  "properties": {
+    "workout_type": {
+      "type": "string",
+      "enum": [
+        "for_time",
+        "amrap",
+        "emom",
+        "tabata",
+        "rounds_for_time",
+        "intervals",
+        "rep_scheme",
+        "chipper",
+        "custom"
+      ]
+    },
+    "movements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "reps", "weight", "distance", "calories"],
+        "additionalProperties": false,
+        "properties": {
+          "name":     {"type": "string", "minLength": 1},
+          "reps":     {"type": ["integer", "null"], "minimum": 0},
+          "weight":   {"type": ["string", "null"]},
+          "distance": {"type": ["string", "null"]},
+          "calories": {"type": ["integer", "null"], "minimum": 0}
+        }
+      }
+    },
+    "intervals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["duration", "type", "repeat"],
+        "additionalProperties": false,
+        "properties": {
+          "duration": {"type": "integer", "minimum": 0},
+          "type":     {"type": "string", "enum": ["work", "rest"]},
+          "repeat":   {"type": "boolean"}
+        }
+      }
+    },
+    "ai_interpretation": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "time_cap": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    }
+  }
+}
