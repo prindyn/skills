@@ -1,0 +1,11 @@
+{
+  "workout_type": "amrap",
+  "movements": [
+    {"name": "", "reps": null, "weight": null, "distance": null, "calories": null}
+  ],
+  "intervals": [
+    {"duration": 1200, "type": "work", "repeat": false}
+  ],
+  "ai_interpretation": "AMRAP <minutes> min: <movements>.",
+  "time_cap": 1200
+}
