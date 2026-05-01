@@ -1,0 +1,11 @@
+{
+  "workout_type": "chipper",
+  "movements": [
+    {"name": "", "reps": null, "weight": null, "distance": null, "calories": null}
+  ],
+  "intervals": [
+    {"duration": 0, "type": "work", "repeat": false}
+  ],
+  "ai_interpretation": "For time: chipper through <movements>.",
+  "time_cap": null
+}
