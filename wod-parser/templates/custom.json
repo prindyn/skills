@@ -1,0 +1,11 @@
+{
+  "workout_type": "custom",
+  "movements": [
+    {"name": "", "reps": null, "weight": null, "distance": null, "calories": null}
+  ],
+  "intervals": [
+    {"duration": 0, "type": "work", "repeat": false}
+  ],
+  "ai_interpretation": "<one-sentence description, ≤120 chars>.",
+  "time_cap": null
+}
