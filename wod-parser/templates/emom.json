@@ -1,0 +1,11 @@
+{
+  "workout_type": "emom",
+  "movements": [
+    {"name": "", "reps": null, "weight": null, "distance": null, "calories": null}
+  ],
+  "intervals": [
+    {"duration": 60, "type": "work", "repeat": true}
+  ],
+  "ai_interpretation": "EMOM <minutes> min: <movements>.",
+  "time_cap": 600
+}
