@@ -1,0 +1,11 @@
+{
+  "workout_type": "rep_scheme",
+  "movements": [
+    {"name": "", "reps": null, "weight": null, "distance": null, "calories": null}
+  ],
+  "intervals": [
+    {"duration": 0, "type": "work", "repeat": false}
+  ],
+  "ai_interpretation": "<scheme, e.g. 21-15-9> reps for time of <movements>.",
+  "time_cap": null
+}
