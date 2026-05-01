@@ -1,0 +1,12 @@
+{
+  "workout_type": "tabata",
+  "movements": [
+    {"name": "", "reps": null, "weight": null, "distance": null, "calories": null}
+  ],
+  "intervals": [
+    {"duration": 20, "type": "work", "repeat": true},
+    {"duration": 10, "type": "rest", "repeat": true}
+  ],
+  "ai_interpretation": "Tabata: 8 rounds of 20s work, 10s rest of <movement>.",
+  "time_cap": 240
+}
