@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{Page title}}</title>
+  <!--
+    Pixel Perfect starter — vanilla HTML + CSS variables.
+
+    1. Generate tokens.css from your DESIGN.md:
+         python scripts/extract_tokens.py DESIGN.md --format css > tokens.css
+    2. Replace the inline <style> below with: <link rel="stylesheet" href="tokens.css" />
+    3. Build your page using only var(--color-*), var(--space-*), var(--rounded-*),
+       and the typography vars. No raw hex literals.
+    4. Run scripts/audit_pixels.py before declaring done.
+  -->
+  <style>
+    /*
+      Replace this block with the output of extract_tokens.py.
+      Shown here is an example matching templates/DESIGN.starter.md.
+    */
+    :root {
+      --color-primary: #1A1C1E;
+      --color-secondary: #6C7278;
+      --color-tertiary: #B8422E;
+      --color-neutral: #F7F5F2;
+
+      --space-xs: 4px;
+      --space-sm: 8px;
+      --space-md: 16px;
+      --space-lg: 24px;
+      --space-xl: 32px;
+      --space-2xl: 48px;
+      --space-3xl: 64px;
+
+      --rounded-sm: 4px;
+      --rounded-md: 8px;
+      --rounded-lg: 16px;
+
+      --font-h1-family: "Inter", system-ui, sans-serif;
+      --font-h1-size: 3rem;
+      --font-h1-weight: 700;
+      --font-h1-line-height: 1.1;
+      --font-h1-letter-spacing: -0.02em;
+
+      --font-body-md-family: "Inter", system-ui, sans-serif;
+      --font-body-md-size: 1rem;
+      --font-body-md-line-height: 1.5;
+    }
+    /* Reset — small, opinionated. */
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: var(--color-neutral);
+      color: var(--color-primary);
+      font-family: var(--font-body-md-family);
+      font-size: var(--font-body-md-size);
+      line-height: var(--font-body-md-line-height);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: var(--space-2xl) var(--space-md);
+    }
+
+    h1 {
+      font-family: var(--font-h1-family);
+      font-size: var(--font-h1-size);
+      font-weight: var(--font-h1-weight);
+      line-height: var(--font-h1-line-height);
+      letter-spacing: var(--font-h1-letter-spacing);
+      margin: 0 0 var(--space-lg) 0;
+    }
+
+    p {
+      margin: 0 0 var(--space-md) 0;
+      max-width: 65ch; /* readable line length */
+    }
+
+    /* Button — primary variant.
+       All states from DESIGN.md.components.* are implemented here. */
+    .button-primary {
+      display: inline-flex;
+      align-items: center;        /* good enough for x-height centering on Inter */
+      justify-content: center;
+      min-height: 44px;            /* meets touch-target minimum */
+      padding: 12px var(--space-md);
+      background-color: var(--color-tertiary);
+      color: #FFFFFF;
+      border: 0;
+      border-radius: var(--rounded-sm);
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 150ms cubic-bezier(0.2, 0, 0, 1);
+    }
+    .button-primary:hover {
+      background-color: var(--color-primary);
+    }
+    .button-primary:focus-visible {
+      outline: 2px solid var(--color-primary);
+      outline-offset: 2px;
+    }
+    .button-primary:active {
+      transform: translateY(1px);
+    }
+    .button-primary:disabled {
+      background-color: var(--color-neutral);
+      color: var(--color-secondary);
+      cursor: not-allowed;
+    }
+
+    /* Card — outer-radius rule applied to nested content.
+       outer = inner + padding + border  →  inner = outer - padding - border */
+    .card {
+      background: #FFFFFF;
+      border-radius: var(--rounded-lg);   /* 16px outer */
+      padding: var(--space-lg);            /* 24px */
+      /* Subtle border via color-mix from a token color, so we don't
+         introduce off-token hex literals. */
+      border: 1px solid color-mix(in srgb, var(--color-primary), transparent 92%);
+    }
+    .card .card-media {
+      /* 16 - 24 - 1 = -9 → not nestable; if nesting bordered media, reduce padding. */
+      border-radius: var(--rounded-sm);
+      overflow: hidden;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .button-primary { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <h1>{{Heading}}</h1>
+    <p>
+      {{Body copy. Replace with worst-case content during QA — try a 200-word
+      paragraph and a 1-character single word to verify both extremes render.}}
+    </p>
+    <div class="card">
+      <p>Card content using only token-driven values.</p>
+      <button class="button-primary" type="button">Primary action</button>
+    </div>
+  </main>
+</body>
+</html>
