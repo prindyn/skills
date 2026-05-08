@@ -1,0 +1,86 @@
+{
+  "_comment": "Base-4 geometric spacing scale. Every margin, padding, gap, width, and height in your UI should come from this list. No arbitrary pixel values.",
+  "_rationale": "Geometric progressions (each step ~1.25-1.5x the previous) feel natural because the ratios between steps are consistent. Arbitrary spacing (14px, 19px, 23px) feels unintentional even when the differences are small.",
+
+  "scale": {
+    "0":    { "px": 0,   "rem": "0",       "use": "Reset / no space" },
+    "px":   { "px": 1,   "rem": "0.0625",  "use": "1px borders, hairlines" },
+    "0.5":  { "px": 2,   "rem": "0.125",   "use": "Micro gaps (badge dot + text)" },
+    "1":    { "px": 4,   "rem": "0.25",    "use": "Tightest useful gap (icon + label)" },
+    "1.5":  { "px": 6,   "rem": "0.375",   "use": "Close text groupings" },
+    "2":    { "px": 8,   "rem": "0.5",     "use": "Default compact padding (badge, tag)" },
+    "2.5":  { "px": 10,  "rem": "0.625",   "use": "Slightly more than compact" },
+    "3":    { "px": 12,  "rem": "0.75",    "use": "Input padding y, table cells" },
+    "3.5":  { "px": 14,  "rem": "0.875",   "use": "Between 3 and 4 when needed" },
+    "4":    { "px": 16,  "rem": "1",       "use": "Default padding (most components)" },
+    "5":    { "px": 20,  "rem": "1.25",    "use": "Medium padding" },
+    "6":    { "px": 24,  "rem": "1.5",     "use": "Card padding, comfortable sections" },
+    "7":    { "px": 28,  "rem": "1.75",    "use": "Generous inner spacing" },
+    "8":    { "px": 32,  "rem": "2",       "use": "Section separation within a page region" },
+    "10":   { "px": 40,  "rem": "2.5",     "use": "Between major content groups" },
+    "12":   { "px": 48,  "rem": "3",       "use": "Large section padding, hero sub-elements" },
+    "14":   { "px": 56,  "rem": "3.5",     "use": "Between sections" },
+    "16":   { "px": 64,  "rem": "4",       "use": "Major section separation" },
+    "20":   { "px": 80,  "rem": "5",       "use": "Large page sections" },
+    "24":   { "px": 96,  "rem": "6",       "use": "Generous hero / feature breathing room" },
+    "28":   { "px": 112, "rem": "7",       "use": "Large layouts" },
+    "32":   { "px": 128, "rem": "8",       "use": "Maximum standard spacing" },
+    "40":   { "px": 160, "rem": "10",      "use": "Page-level vertical rhythm" },
+    "48":   { "px": 192, "rem": "12",      "use": "Hero sections" },
+    "56":   { "px": 224, "rem": "14",      "use": "Maximum hero vertical space" },
+    "64":   { "px": 256, "rem": "16",      "use": "Full-bleed page-level margins" }
+  },
+
+  "component_defaults": {
+    "_comment": "Recommended defaults. Adjust up if in doubt — more whitespace almost always looks better.",
+    "button": {
+      "padding_y": "space-2 (8px)",
+      "padding_x": "space-4 (16px)",
+      "gap_icon_text": "space-2 (8px)"
+    },
+    "input": {
+      "padding_y": "space-2 (8px)",
+      "padding_x": "space-3 (12px)"
+    },
+    "card": {
+      "padding": "space-6 (24px)",
+      "gap_sections": "space-4 (16px)"
+    },
+    "form_field": {
+      "label_to_input": "space-1.5 (6px)",
+      "field_to_field": "space-5 (20px)",
+      "group_to_group": "space-8 (32px)"
+    },
+    "list_item": {
+      "padding_y": "space-3 (12px)",
+      "padding_x": "space-4 (16px)"
+    },
+    "table_cell": {
+      "padding_y": "space-3 (12px)",
+      "padding_x": "space-4 (16px)"
+    },
+    "modal": {
+      "padding": "space-6 (24px)",
+      "header_margin_bottom": "space-4 (16px)"
+    },
+    "page_section": {
+      "padding_y": "space-16 (64px)",
+      "gap_between_sections": "space-16 (64px)"
+    }
+  },
+
+  "relationships": {
+    "_comment": "The spacing relationship rule: space inside a group < space between groups. This is how spacing communicates structure.",
+    "example_form": {
+      "label_to_input": "space-1.5 (6px)  — same field, very close",
+      "input_to_helper": "space-1 (4px)   — part of same field",
+      "field_to_field": "space-5 (20px)  — separate fields, related group",
+      "group_to_group": "space-8 (32px)  — separate conceptual groups"
+    },
+    "example_navigation": {
+      "icon_to_label": "space-3 (12px)  — same nav item",
+      "item_to_item": "space-1 (4px)   — items in same section",
+      "section_to_section": "space-4 (16px) — between nav sections"
+    }
+  }
+}
