@@ -1,0 +1,169 @@
+{
+  "_comment": "Typography system reference. All font sizes, weights, line-heights, and letter-spacings for a production-ready type scale.",
+  "_rationale": "Limiting font sizes to 8 values forces intentionality. Every size gets a clear semantic role. Line-height decreases as font size increases — large text has proportionally more built-in whitespace.",
+
+  "scale": {
+    "xs": {
+      "size_px": 12,
+      "size_rem": "0.75rem",
+      "line_height": 1.5,
+      "line_height_px": 18,
+      "letter_spacing": "normal (0)",
+      "weight_typical": "400–600",
+      "use_cases": ["Captions", "Helper text", "Timestamps", "Badge labels", "Fine print"],
+      "max_width": "never use for long-form text"
+    },
+    "sm": {
+      "size_px": 14,
+      "size_rem": "0.875rem",
+      "line_height": 1.5,
+      "line_height_px": 21,
+      "letter_spacing": "normal (0)",
+      "weight_typical": "400–500",
+      "use_cases": ["Small labels", "Secondary UI text", "Table cells", "Dropdown items", "Tooltip text"],
+      "max_width": "no constraint needed at this size"
+    },
+    "base": {
+      "size_px": 16,
+      "size_rem": "1rem",
+      "line_height": 1.625,
+      "line_height_px": 26,
+      "letter_spacing": "normal (0)",
+      "weight_typical": "400",
+      "use_cases": ["Body text (default)", "Paragraph text", "Form inputs", "Navigation labels"],
+      "max_width": "65ch for prose"
+    },
+    "lg": {
+      "size_px": 18,
+      "size_rem": "1.125rem",
+      "line_height": 1.5,
+      "line_height_px": 27,
+      "letter_spacing": "normal (0)",
+      "weight_typical": "400–500",
+      "use_cases": ["Lead paragraphs", "Emphasized body", "Intro text", "Large form labels"],
+      "max_width": "60ch for prose"
+    },
+    "xl": {
+      "size_px": 20,
+      "size_rem": "1.25rem",
+      "line_height": 1.4,
+      "line_height_px": 28,
+      "letter_spacing": "-0.01em",
+      "weight_typical": "500–600",
+      "use_cases": ["Card headings", "Dialog titles", "Sidebar headings"],
+      "max_width": "no constraint"
+    },
+    "2xl": {
+      "size_px": 24,
+      "size_rem": "1.5rem",
+      "line_height": 1.3,
+      "line_height_px": 31,
+      "letter_spacing": "-0.01em",
+      "weight_typical": "600–700",
+      "use_cases": ["Section headings", "Modal titles", "Feature card headings"],
+      "max_width": "no constraint"
+    },
+    "3xl": {
+      "size_px": 30,
+      "size_rem": "1.875rem",
+      "line_height": 1.25,
+      "line_height_px": 37,
+      "letter_spacing": "-0.02em",
+      "weight_typical": "700",
+      "use_cases": ["Page subheadings", "Dashboard headings", "Landing section titles"],
+      "max_width": "no constraint"
+    },
+    "4xl": {
+      "size_px": 36,
+      "size_rem": "2.25rem",
+      "line_height": 1.2,
+      "line_height_px": 43,
+      "letter_spacing": "-0.025em",
+      "weight_typical": "700–800",
+      "use_cases": ["Page headings (h1)", "Large dashboard numbers", "Key metrics"],
+      "max_width": "no constraint"
+    },
+    "5xl": {
+      "size_px": 48,
+      "size_rem": "3rem",
+      "line_height": 1.1,
+      "line_height_px": 53,
+      "letter_spacing": "-0.03em",
+      "weight_typical": "700–900",
+      "use_cases": ["Hero headings", "Display text", "Marketing headlines"],
+      "max_width": "no constraint (short phrases only)"
+    },
+    "6xl": {
+      "size_px": 60,
+      "size_rem": "3.75rem",
+      "line_height": 1.05,
+      "line_height_px": 63,
+      "letter_spacing": "-0.04em",
+      "weight_typical": "700–900",
+      "use_cases": ["Large hero displays", "Full-screen takeovers"],
+      "max_width": "no constraint (1–2 words typical)"
+    }
+  },
+
+  "weights": {
+    "normal":    { "value": 400, "use": "Body text, default" },
+    "medium":    { "value": 500, "use": "Labels, emphasized body, UI elements" },
+    "semibold":  { "value": 600, "use": "Subheadings, button labels, nav items" },
+    "bold":      { "value": 700, "use": "Headings, primary emphasis" },
+    "extrabold": { "value": 800, "use": "Large display headings, hero text" },
+    "black":     { "value": 900, "use": "Maximum impact — use sparingly" }
+  },
+
+  "letter_spacing": {
+    "tighter": { "value": "-0.05em", "use": "Large display text (5xl+)" },
+    "tight":   { "value": "-0.025em","use": "Headlines (3xl–4xl)" },
+    "normal":  { "value": "0",       "use": "Body text — never adjust" },
+    "wide":    { "value": "0.025em", "use": "Small all-caps labels" },
+    "wider":   { "value": "0.05em",  "use": "All-caps labels, small caps" },
+    "widest":  { "value": "0.1em",   "use": "Maximum all-caps label spacing" }
+  },
+
+  "font_pairings": {
+    "modern-saas": {
+      "heading": "Inter",
+      "body": "Inter",
+      "mono": "JetBrains Mono",
+      "personality": "clean, focused, technical",
+      "google_fonts": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+    },
+    "editorial": {
+      "heading": "Fraunces",
+      "body": "Source Serif 4",
+      "personality": "authoritative, editorial, trustworthy",
+      "google_fonts": "https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Source+Serif+4:ital,wght@0,400;1,400&display=swap"
+    },
+    "playful": {
+      "heading": "Plus Jakarta Sans",
+      "body": "DM Sans",
+      "personality": "friendly, approachable, modern startup",
+      "google_fonts": "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700&family=DM+Sans:wght@400;500&display=swap"
+    },
+    "premium": {
+      "heading": "Playfair Display",
+      "body": "Lato",
+      "personality": "elegant, luxury, sophisticated",
+      "google_fonts": "https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Lato:wght@400;500&display=swap"
+    },
+    "developer": {
+      "heading": "Space Grotesk",
+      "body": "Inter",
+      "mono": "JetBrains Mono",
+      "personality": "technical, developer-focused, precise",
+      "google_fonts": "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500&display=swap"
+    }
+  },
+
+  "common_mistakes": {
+    "too_many_sizes": "More than 8 distinct font sizes creates visual chaos. Audit with: grep -E 'font-size:' styles.css | sort -u",
+    "equal_size_hierarchy": "Using font size as the only hierarchy signal. Fix by adding weight and color variations.",
+    "centered_body_text": "Left-align all long-form body text. Center only for short UI strings.",
+    "line_too_long": "Body text without max-width on a 1440px screen is unreadable. Set max-width: 65ch on prose.",
+    "constant_line_height": "Using line-height: 1.5 on everything including h1 feels cramped for headings. Tighten to 1.1-1.2 for large text.",
+    "untracked_letters": "Large headings without letter-spacing: -0.02em to -0.04em look loose and digital-ugly. Always tighten."
+  }
+}
