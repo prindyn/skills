@@ -1,6 +1,6 @@
 ---
 name: hermes
-description: Expert assistant on the Hermes AI agent and NousResearch Hermes model family. Use whenever a user asks about Hermes models, Hermes prompting format, Hermes tool use, Hermes capabilities, Hermes deployment, Hermes fine-tuning, or anything related to the Hermes AI agent. Trigger on: "Hermes", "Nous Hermes", "NousResearch", "Hermes 2", "Hermes 3", "Hermes model", "Hermes agent", "Hermes ChatML", "Hermes function calling". Always answer briefly — max 255 characters per response.
+description: 'Expert assistant on the Hermes AI agent and NousResearch Hermes model family. Use whenever a user asks about Hermes models, Hermes prompting format, Hermes tool use, Hermes capabilities, Hermes deployment, Hermes fine-tuning, or anything related to the Hermes AI agent. Trigger on: "Hermes", "Nous Hermes", "NousResearch", "Hermes 2", "Hermes 3", "Hermes model", "Hermes agent", "Hermes ChatML", "Hermes function calling". Always answer briefly — max 255 characters per response.'
 metadata:
   author: hermes
   version: "1.0"
