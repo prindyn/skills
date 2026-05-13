@@ -1,77 +1,141 @@
 # Hermes Deployment Guide
 
-All deployment options for running Hermes locally or via API.
+## Overview
 
-## Option 1: Ollama (easiest local setup)
+Three primary deployment paths:
 
-```bash
-# Install Ollama (Mac/Linux/Windows)
-curl -fsSL https://ollama.com/install.sh | sh
+| Method | Startup time | OpenAI API compat | GPU required | Best for |
+|---|---|---|---|---|
+| **Ollama** | ~30 seconds | Yes (via `/v1`) | Optional (CPU fallback) | Local dev, quick start |
+| **vLLM** | 1–5 minutes | Yes (native) | Yes | Production, high throughput |
+| **HuggingFace Transformers** | 2–10 minutes | No (raw) | Recommended | Custom pipelines, fine-tuning |
 
-# Pull and run Hermes 3 8B
-ollama run hermes3
+---
 
-# Pull specific variant
-ollama pull nous-hermes2         # Hermes 2 (Mistral)
-ollama pull nous-hermes2:34b     # Hermes 2 34B
-ollama pull hermes3              # Hermes 3 8B
-ollama pull hermes3:70b          # Hermes 3 70B
-```
+## Ollama
 
-Ollama automatically handles ChatML formatting. Use via REST:
+Ollama is the fastest way to get Hermes running locally. It handles GGUF downloading, quantization selection, and model management.
+
+### Install
 
 ```bash
-curl http://localhost:11434/api/chat -d '{
-  "model": "hermes3",
-  "messages": [{"role": "user", "content": "Hello!"}]
-}'
+curl -fsSL https://ollama.ai/install.sh | sh
 ```
 
-## Option 2: llama.cpp (GGUF, maximum control)
+### Pull and run
 
 ```bash
-# Install llama.cpp
-brew install llama.cpp  # Mac
-# or build from source: https://github.com/ggerganov/llama.cpp
+# Hermes 3 8B (recommended for local dev)
+ollama run hf.co/NousResearch/Hermes-3-Llama-3.1-8B-GGUF
 
-# Download GGUF model from HuggingFace
-# Recommended: NousResearch/Hermes-3-Llama-3.1-8B-GGUF
-
-# Run with ChatML template
-./llama-cli \
-  -m Hermes-3-Llama-3.1-8B.Q4_K_M.gguf \
-  --chat-template chatml \
-  -p "You are Hermes, a helpful AI assistant." \
-  -cnv
+# Or via bartowski's Q4 quantization (smaller download)
+ollama run hf.co/bartowski/Hermes-3-Llama-3.1-8B-GGUF:Q4_K_M
 ```
 
-Python binding:
+### OpenAI-compatible API
+
+Once Ollama is running, it exposes an OpenAI-compatible endpoint at `http://localhost:11434/v1`:
 
 ```python
-from llama_cpp import Llama
+from openai import OpenAI
 
-llm = Llama(
-    model_path="Hermes-3-Llama-3.1-8B.Q4_K_M.gguf",
-    chat_format="chatml",
-    n_ctx=8192,
-    n_gpu_layers=-1,  # Use all GPU layers
-)
+client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
 
-response = llm.create_chat_completion(
+response = client.chat.completions.create(
+    model="hf.co/NousResearch/Hermes-3-Llama-3.1-8B-GGUF",
     messages=[
-        {"role": "system", "content": "You are Hermes, a helpful assistant."},
-        {"role": "user", "content": "What is the capital of France?"}
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Hello!"}
     ],
-    temperature=0.7,
-    max_tokens=256,
+    stop=["<|im_end|>"],
 )
-print(response["choices"][0]["message"]["content"])
+print(response.choices[0].message.content)
 ```
 
-## Option 3: HuggingFace Transformers
+### Hardware requirements (Ollama)
+
+| Model | VRAM (Q4_K_M) | CPU fallback |
+|---|---|---|
+| Hermes 3 8B | ~5 GB | Yes (slow) |
+| Hermes 2 Pro 7B | ~5 GB | Yes (slow) |
+| Hermes 3 70B | ~40 GB | Not practical |
+
+---
+
+## vLLM
+
+vLLM is the standard for production deployments. It provides batching, continuous batching, PagedAttention, and a fully OpenAI-compatible API server.
+
+### Install
+
+```bash
+pip install vllm
+```
+
+### Launch server
+
+```bash
+# Hermes 3 8B — full precision (requires ~16 GB VRAM)
+vllm serve NousResearch/Hermes-3-Llama-3.1-8B \
+  --dtype auto \
+  --max-model-len 32768
+
+# With 4-bit AWQ quantization (requires ~6 GB VRAM)
+vllm serve NousResearch/Hermes-3-Llama-3.1-8B \
+  --quantization awq \
+  --dtype auto
+
+# Hermes 3 70B across multiple GPUs
+vllm serve NousResearch/Hermes-3-Llama-3.1-70B \
+  --tensor-parallel-size 4 \
+  --dtype auto
+```
+
+The server starts at `http://localhost:8000` with an OpenAI-compatible API.
+
+### Connect via OpenAI client
 
 ```python
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="EMPTY")
+
+response = client.chat.completions.create(
+    model="NousResearch/Hermes-3-Llama-3.1-8B",
+    messages=[...],
+    temperature=0.2,
+    max_tokens=1024,
+    stop=["<|im_end|>"],
+)
+```
+
+### vLLM important flags
+
+| Flag | Purpose |
+|---|---|
+| `--max-model-len` | Reduce from default (128K) to save VRAM |
+| `--tensor-parallel-size N` | Split model across N GPUs |
+| `--quantization awq` | Load AWQ-quantized model |
+| `--quantization gptq` | Load GPTQ-quantized model |
+| `--gpu-memory-utilization 0.9` | Fraction of GPU memory to use (default 0.9) |
+| `--enforce-eager` | Disable CUDA graphs (slower but less VRAM) |
+
+---
+
+## HuggingFace Transformers
+
+For direct inference, fine-tuning, or custom pipeline work.
+
+### Install
+
+```bash
+pip install transformers accelerate torch
+```
+
+### Basic inference
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 
 model_id = "NousResearch/Hermes-3-Llama-3.1-8B"
@@ -84,65 +148,107 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 messages = [
-    {"role": "system", "content": "You are Hermes, a helpful assistant."},
-    {"role": "user", "content": "Explain photosynthesis in one sentence."},
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": "What is the speed of light?"},
 ]
 
 prompt = tokenizer.apply_chat_template(
-    messages, tokenize=False, add_generation_prompt=True
+    messages,
+    tokenize=False,
+    add_generation_prompt=True,
 )
+
 inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-outputs = model.generate(**inputs, max_new_tokens=256, temperature=0.7, do_sample=True)
-response = tokenizer.decode(outputs[0][inputs["input_ids"].shape[-1]:], skip_special_tokens=True)
+
+with torch.no_grad():
+    output = model.generate(
+        **inputs,
+        max_new_tokens=512,
+        temperature=0.2,
+        do_sample=True,
+        eos_token_id=tokenizer.eos_token_id,
+        pad_token_id=tokenizer.eos_token_id,
+    )
+
+response = tokenizer.decode(output[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 print(response)
 ```
 
-## Option 4: vLLM (high-throughput serving)
+### 4-bit quantization with bitsandbytes
 
 ```bash
-pip install vllm
-
-python -m vllm.entrypoints.openai.api_server \
-  --model NousResearch/Hermes-3-Llama-3.1-8B \
-  --dtype bfloat16 \
-  --max-model-len 32768
+pip install bitsandbytes
 ```
-
-Then use via OpenAI-compatible API:
 
 ```python
-from openai import OpenAI
+from transformers import BitsAndBytesConfig
 
-client = OpenAI(base_url="http://localhost:8000/v1", api_key="not-needed")
-
-response = client.chat.completions.create(
-    model="NousResearch/Hermes-3-Llama-3.1-8B",
-    messages=[{"role": "user", "content": "Hello, Hermes!"}],
+bnb_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.bfloat16,
 )
-print(response.choices[0].message.content)
+
+model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    quantization_config=bnb_config,
+    device_map="auto",
+)
 ```
 
-## Option 5: Cloud APIs
+---
 
-Hermes 3 is available through:
+## Hardware requirements summary
 
-| Provider | Model name | Notes |
-|---|---|---|
-| NVIDIA NIM | `nousresearch/hermes-3-llama-3.1-405b` | Optimized inference |
-| Together AI | `NousResearch/Hermes-3-Llama-3.1-405B-FP8-tput` | FP8, high throughput |
-| Fireworks AI | `accounts/fireworks/models/hermes-3-llama3p1-405b` | Fast inference |
-| Perplexity | Via pplx-api | Check current availability |
-
-## VRAM requirements
-
-| Model | Full precision | 8-bit | 4-bit (Q4_K_M) |
+| Model | Method | Min VRAM | Recommended |
 |---|---|---|---|
-| 8B | ~16 GB | ~9 GB | ~5 GB |
-| 70B | ~140 GB | ~70 GB | ~40 GB |
-| 405B | ~810 GB | ~405 GB | ~230 GB |
+| Hermes 3 8B | vLLM fp16 | 16 GB | RTX 4090, A10G |
+| Hermes 3 8B | Ollama Q4 | 5 GB | RTX 3060 12GB |
+| Hermes 3 8B | vLLM AWQ | 6 GB | RTX 3080 10GB |
+| Hermes 2 Pro 7B | vLLM fp16 | 14 GB | RTX 4080 |
+| Hermes 3 70B | vLLM fp16 | 140 GB | 4× A100 80GB |
+| Hermes 3 70B | vLLM AWQ | 40 GB | 2× A100 40GB |
+| Hermes 3 70B | Ollama Q4 | 40 GB | 2× A100 40GB |
+| Hermes 3 405B | vLLM fp16 | 810 GB | 8× H100 |
+| Hermes 3 405B | vLLM AWQ | 210 GB | 4× H100 |
 
-## Recommended hardware
+---
 
-- **Consumer (8B)**: RTX 3090/4090 (24 GB VRAM), M1/M2 Mac (16 GB+ unified memory)
-- **Workstation (70B)**: 2× A100 80GB or 4× RTX 3090
-- **Server (405B)**: 4–8× A100 80GB or H100 cluster
+## Docker deployment (vLLM)
+
+```dockerfile
+FROM vllm/vllm-openai:latest
+
+ENV MODEL=NousResearch/Hermes-3-Llama-3.1-8B
+ENV MAX_MODEL_LEN=32768
+
+CMD vllm serve $MODEL --max-model-len $MAX_MODEL_LEN --dtype auto
+```
+
+```bash
+docker run --gpus all -p 8000:8000 \
+  -e HF_TOKEN=$HF_TOKEN \
+  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  hermes-server
+```
+
+---
+
+## Environment variables
+
+| Variable | Purpose |
+|---|---|
+| `HF_TOKEN` | HuggingFace access token (for gated repos) |
+| `HF_HOME` | Cache directory for model weights |
+| `CUDA_VISIBLE_DEVICES` | Select specific GPUs |
+| `VLLM_WORKER_MULTIPROC_METHOD` | Set to `spawn` if fork causes issues |
+
+---
+
+## Gotchas
+
+- **Model weights can be large.** Hermes 3 8B is ~16 GB in fp16. Use a volume mount or shared cache directory across containers.
+- **vLLM by default tries to load the full context length into its KV cache.** If you get OOM, reduce `--max-model-len` (e.g., 16384 instead of 128000).
+- **Ollama uses its own model management.** Don't mix Ollama and HuggingFace model paths — they use different formats.
+- **Chat template must match the model.** Always use `apply_chat_template` from the same tokenizer as the model. Mismatched templates silently degrade output quality.
+- **`pad_token_id` needs to be set.** HuggingFace will warn if not set; use `tokenizer.eos_token_id` as the pad token.
