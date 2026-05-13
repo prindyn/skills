@@ -1,0 +1,50 @@
+{
+  "_comment": "Template for a single Hermes tool/function definition. Paste into the <tools> block in your system prompt. Remove _comment fields before use.",
+  "type": "function",
+  "function": {
+    "name": "function_name",
+    "_comment_name": "snake_case, no spaces. Used verbatim in <tool_call> output.",
+    "description": "One or two sentences describing what this function does and when to use it. Be specific about inputs and outputs.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "required_string_param": {
+          "type": "string",
+          "description": "What this parameter represents. Include format hints if non-obvious (e.g. 'ISO 8601 date string like 2024-01-15')."
+        },
+        "required_enum_param": {
+          "type": "string",
+          "enum": ["option_a", "option_b", "option_c"],
+          "description": "Must be one of the listed values."
+        },
+        "optional_number_param": {
+          "type": "number",
+          "description": "Optional. Default is 10. Maximum is 100."
+        },
+        "optional_array_param": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Optional list of strings. Leave empty to return all results."
+        },
+        "optional_object_param": {
+          "type": "object",
+          "properties": {
+            "nested_field": {
+              "type": "string",
+              "description": "A nested field within the object."
+            }
+          },
+          "description": "Optional nested configuration object."
+        },
+        "optional_boolean_param": {
+          "type": "boolean",
+          "description": "Optional. Set to true to enable verbose output. Defaults to false."
+        }
+      },
+      "required": ["required_string_param", "required_enum_param"],
+      "_comment_required": "List only truly required params. Optional params reduce model call errors."
+    }
+  }
+}
