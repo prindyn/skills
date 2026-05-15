@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-run_all.py — One-shot pipeline: crawl → scrape → build PDF.
+run_all.py — One-shot pipeline: crawl → scrape → post-process → build PDF.
 
-Orchestrates crawl.py, scrape.py, and build_pdf.py in sequence,
+Orchestrates crawl.py, scrape.py, postprocess.py, and build_pdf.py in sequence,
 managing the working directory and passing arguments through.
 
 Usage:
     python run_all.py --url https://example.com --output book.pdf
-    python run_all.py --url https://docs.example.com \
-        --title "Example Docs" \
-        --target-pages 100 \
-        --max-depth 4 \
-        --output example-docs.pdf \
+    python run_all.py --url https://docs.example.com \\
+        --title "Example Docs" \\
+        --target-pages 100 \\
+        --max-depth 4 \\
+        --output example-docs.pdf \\
         --work-dir /tmp/write-book-example
 """
 
@@ -33,7 +33,7 @@ def run(cmd: list[str], label: str):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="End-to-end: crawl site → scrape → PDF book")
+    parser = argparse.ArgumentParser(description="End-to-end: crawl site → scrape → post-process → PDF book")
     parser.add_argument("--url", required=True, help="Root URL to crawl")
     parser.add_argument("--output", default="book.pdf", help="Output PDF path")
     parser.add_argument("--title", default="", help="Book title")
@@ -46,7 +46,8 @@ def main():
     parser.add_argument("--max-pages", type=int, default=0,
                         help="Hard cap on crawled pages (overrides target-pages calculation if set)")
     parser.add_argument("--include", default=None, help="URL include regex")
-    parser.add_argument("--exclude", default=None, help="URL exclude regex")
+    parser.add_argument("--exclude", default=None,
+                        help="URL exclude regex applied to both crawl and scrape steps")
     parser.add_argument("--main-selector", default=None, help="CSS selector for main content")
     parser.add_argument("--delay", type=float, default=0.25, help="Seconds between requests")
     parser.add_argument("--no-verify-ssl", action="store_true")
@@ -64,12 +65,45 @@ def main():
         help="Minimum word count for a page to be included (default: 150)"
     )
     parser.add_argument(
-        "--toc-max-depth", type=int, default=1,
-        help="Maximum depth shown in table of contents (default: 1)"
+        "--toc-max-depth", type=int, default=3,
+        help="Maximum depth shown in table of contents (default: 3)"
     )
     parser.add_argument(
-        "--toc-max-entries", type=int, default=30,
-        help="Maximum entries in table of contents (default: 30)"
+        "--toc-max-entries", type=int, default=500,
+        help="Maximum entries in table of contents (default: 500)"
+    )
+    parser.add_argument(
+        "--running-header", default="",
+        help="Running header text shown at top of every page"
+    )
+    parser.add_argument(
+        "--no-index", action="store_true",
+        help="Disable alphabetical back-of-book index generation"
+    )
+    parser.add_argument(
+        "--no-builtin-excludes", action="store_true",
+        help="Disable scraper's built-in e-commerce/testimonial/forum URL exclusions"
+    )
+    # Post-processing flags
+    parser.add_argument(
+        "--deduplicate", action="store_true", default=True,
+        help="Deduplicate near-identical pages (default: on)"
+    )
+    parser.add_argument(
+        "--no-deduplicate", action="store_true",
+        help="Disable deduplication"
+    )
+    parser.add_argument(
+        "--collapse-language-stubs", action="store_true",
+        help="Collapse per-language stub catalog pages into one"
+    )
+    parser.add_argument(
+        "--move-code-appendix", action="store_true",
+        help="Move code-heavy pages to an appendix section"
+    )
+    parser.add_argument(
+        "--url-to-footnotes", action="store_true",
+        help="Convert bare inline URLs to Markdown footnotes"
     )
     args = parser.parse_args()
 
@@ -82,14 +116,13 @@ def main():
     css = args.css or str(here.parent / "assets" / "book.css")
 
     # Determine max-pages for the crawl step
-    # If --target-pages is set and --max-pages not explicitly given, derive it
     if args.target_pages > 0 and args.max_pages == 0:
         max_pages = args.target_pages * 3
         print(f"target-pages={args.target_pages} → crawling up to {max_pages} source pages")
     elif args.max_pages > 0:
         max_pages = args.max_pages
     else:
-        max_pages = 500  # default
+        max_pages = 500
 
     # Step 1: Crawl
     crawl_cmd = [
@@ -108,7 +141,7 @@ def main():
         crawl_cmd.append("--no-verify-ssl")
     if args.no_robots:
         crawl_cmd.append("--no-robots")
-    run(crawl_cmd, "Step 1/3: Crawl site")
+    run(crawl_cmd, "Step 1/4: Crawl site")
 
     # Step 2: Scrape
     scrape_cmd = [
@@ -124,9 +157,29 @@ def main():
         scrape_cmd.append("--no-verify-ssl")
     if args.keep_external_links:
         scrape_cmd.append("--keep-external-links")
-    run(scrape_cmd, "Step 2/3: Scrape content")
+    if args.exclude:
+        scrape_cmd += ["--exclude", args.exclude]
+    if args.no_builtin_excludes:
+        scrape_cmd.append("--no-builtin-excludes")
+    run(scrape_cmd, "Step 2/4: Scrape content")
 
-    # Step 3: Build PDF
+    # Step 3: Post-process
+    postprocess_cmd = [
+        sys.executable, str(here / "postprocess.py"),
+        "--pages-dir", str(pages_dir),
+        "--min-content-words", str(args.min_words),
+    ]
+    if not args.no_deduplicate:
+        postprocess_cmd.append("--deduplicate")
+    if args.collapse_language_stubs:
+        postprocess_cmd.append("--collapse-language-stubs")
+    if args.move_code_appendix:
+        postprocess_cmd.append("--move-code-appendix")
+    if args.url_to_footnotes:
+        postprocess_cmd.append("--url-to-footnotes")
+    run(postprocess_cmd, "Step 3/4: Post-process and clean")
+
+    # Step 4: Build PDF
     build_cmd = [
         sys.executable, str(here / "build_pdf.py"),
         "--sitemap", str(sitemap),
@@ -142,7 +195,11 @@ def main():
         build_cmd += ["--title", args.title]
     if args.target_pages > 0:
         build_cmd += ["--target-pages", str(args.target_pages)]
-    run(build_cmd, "Step 3/3: Build PDF")
+    if args.running_header:
+        build_cmd += ["--running-header", args.running_header]
+    if args.no_index:
+        build_cmd.append("--no-index")
+    run(build_cmd, "Step 4/4: Build PDF")
 
     print(f"\nAll done! Book written to: {args.output}")
 
