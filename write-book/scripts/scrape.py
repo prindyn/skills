@@ -10,6 +10,9 @@ By default:
   - HTML comments are stripped
   - Comment sections (Disqus, WordPress, etc.) are removed
   - E-commerce, testimonial, forum, and FAQ elements are stripped
+  - Legal / account pages (privacy, terms, gdpr, cookies, imprint, about, login, signup) are excluded
+  - "In Other Languages" navigation tab rows are stripped via CSS selectors
+  - Site CTAs and upsells are stripped via regex ("Tired of reading?", "Get the book", etc.)
   - [code]/[/code] artifacts are converted to fenced code blocks
   - "Your browser does not support HTML video" lines are removed
   - Empty widget labels (Complexity:, Popularity:, Vote counts) are removed
@@ -100,6 +103,18 @@ NOISE_SELECTORS = [
     ".checkout", ".buy-now", ".purchase-section",
     ".sale-banner", ".promo-banner", ".offer-banner",
     "[class*='pricing']", "[id*='pricing']",
+    # CTA / upsell blocks
+    ".cta", ".cta-block", ".cta-section",
+    "[class*='cta-']", "[id*='cta-']",
+    ".upsell", "[class*='upsell']", "[id*='upsell']",
+    ".buy-box", ".purchase-box", ".get-book",
+    "[class*='buy-box']", "[class*='purchase-box']",
+    # "In Other Languages" navigation tabs
+    ".language-tabs", ".lang-tabs",
+    "[class*='language-tab']", "[class*='lang-tab']",
+    ".in-other-languages", "[class*='other-languages']",
+    ".available-in", "[class*='available-in']",
+    ".translations-list", "[class*='translation']",
     # Language / regional sales banners
     ".language-notice", ".translation-notice",
     "[class*='language-banner']", "[class*='lang-notice']",
@@ -110,7 +125,7 @@ NOISE_SELECTORS = [
     # Media fallback containers
     ".video-fallback", "[class*='video-placeholder']",
     # Misc noise
-    ".cookie-consent", ".gdpr-notice",
+    ".cookie-consent", ".gdpr-notice", ".privacy-notice",
     ".back-to-top", "[class*='back-to-top']",
     ".related-posts", ".related-articles",
     "[class*='related']",
@@ -137,7 +152,7 @@ _MD_CLEANUP_PATTERNS = [
     (re.compile(r'by UserEcho\s*\n?', re.IGNORECASE), ''),
     # "N month(s) ago • updated" forum timestamps
     (re.compile(r'\d+\s+months?\s+ago\s*[•·]\s*updated\s*\n?', re.IGNORECASE), ''),
-    # Multi-language sales banners like "This product is only available in English"
+    # Multi-language sales banners
     (re.compile(
         r'(This (product|book|course) is (currently )?only available in English\.?\s*\n?'
         r'|Этот продукт доступен только на английском\.?\s*\n?'
@@ -146,6 +161,27 @@ _MD_CLEANUP_PATTERNS = [
         r'|此产品仅提供英文版\.?\s*\n?)',
         re.IGNORECASE
     ), ''),
+    # "In Other Languages" tab row artifacts
+    (re.compile(r'^In Other Languages\s*\n?', re.MULTILINE | re.IGNORECASE), ''),
+    (re.compile(r'^Available in:.*?\n?', re.MULTILINE | re.IGNORECASE), ''),
+    # Site CTAs / upsells
+    (re.compile(r'Tired of reading\?.*?\n', re.IGNORECASE | re.DOTALL), ''),
+    (re.compile(r'(Get|Download|Buy)\s+(the\s+)?(book|course|ebook|pdf)\s+(now|today|here)\.?\s*\n?', re.IGNORECASE), ''),
+    (re.compile(r'(Check out|Read)\s+(our|the)\s+(free|new|full)\s+.*?course.*?\n?', re.IGNORECASE), ''),
+    (re.compile(r'\*\*(Buy|Purchase|Order)\s+(now|today)\*\*.*?\n?', re.IGNORECASE), ''),
+    (re.compile(r'Spring SALE.*?\n?', re.IGNORECASE), ''),
+    (re.compile(r'Summer SALE.*?\n?', re.IGNORECASE), ''),
+    (re.compile(r'Money-back guarantee.*?\n?', re.IGNORECASE), ''),
+    (re.compile(r'Buy as a gift.*?\n?', re.IGNORECASE), ''),
+    (re.compile(r'(Add to cart|Checkout|Purchase)\s*\n?', re.IGNORECASE), ''),
+    (re.compile(r'Can I buy (on Amazon|this book).*?\n?', re.IGNORECASE), ''),
+    # Author chat / social promo
+    (re.compile(r'P\.?S\.?\s+Track me on (Facebook|Twitter|Instagram|social media).*?\n?', re.IGNORECASE), ''),
+    (re.compile(r'(Follow|Join) me on (Facebook|Twitter|Instagram|social media).*?\n?', re.IGNORECASE), ''),
+    # "Was this page helpful?" site chrome
+    (re.compile(r'Was this (page|article|post)\s+helpful\?.*?\n?', re.IGNORECASE), ''),
+    (re.compile(r'Share this (page|post|article).*?\n?', re.IGNORECASE), ''),
+    (re.compile(r'Edit this page.*?\n?', re.IGNORECASE), ''),
     # URL-only lines (bare http links on their own line, no surrounding prose)
     (re.compile(r'^\s*https?://\S+\s*$', re.MULTILINE), ''),
     # Breadcrumb URL slugs in parentheses: (refactoring.guru/design-patterns/strategy)
@@ -155,7 +191,6 @@ _MD_CLEANUP_PATTERNS = [
 ]
 
 # Navigation sidebar artifacts: bare indented file-tree lines
-# e.g. "Navigation / Intro / buttons / Button / MacOSButton"
 _NAV_TREE_RE = re.compile(
     r'^(?:Navigation|Intro|buttons?|Button|MacOSButton|WindowsButton|LinuxButton'
     r'|Component|Factory|Abstract|Concrete|Client|Context|State|Strategy'
@@ -165,16 +200,27 @@ _NAV_TREE_RE = re.compile(
     re.MULTILINE
 )
 
-# URL patterns for pages that should be excluded from a book
+# URL patterns for pages that should be excluded from a book.
+# These cover legal, account, sales, community, and navigation noise.
 _DEFAULT_EXCLUDE_URL_PATTERNS = [
-    r'/(sale|spring-sale|discount|promo|coupon)',
+    # Legal / compliance
+    r'/(privacy|privacy-policy)',
+    r'/(terms|terms-of-service|terms-of-use|tos)',
+    r'/(legal|disclaimer|imprint)',
+    r'/(gdpr|cookies|cookie-policy)',
+    # Account / auth
+    r'/(login|logout|sign-?in|sign-?up|signup|register|account|profile|dashboard)',
+    r'/(cart|basket|wishlist)',
+    # About / personal
+    r'/(about|about-us|about-me)',
+    # E-commerce / sales
+    r'/(sale|spring-sale|summer-sale|discount|promo|coupon)',
     r'/(pricing|price|buy|purchase|checkout|order|gift|amazon)',
     r'/(refund|money-back|guarantee)',
     r'/(testimonial|review|customer)',
     r'/(faq|payment|payment-method)',
     r'/(forum|community|userecho)',
     r'/(newsletter|subscribe|sendy)',
-    r'/(login|logout|signup|register|account)',
     r'/(search|tag|category|author)/',
 ]
 
@@ -252,16 +298,15 @@ def strip_leading_h1(md: str, title: str) -> str:
     """
     lines = md.split('\n')
     for i, line in enumerate(lines):
-        stripped = line.lstrip('#').strip()
         if line.startswith('# '):
-            # Always remove the first H1 — it is always re-added as the chapter header
+            # Always remove the first H1 — it is re-added as the chapter header
             rest = '\n'.join(lines[i + 1:])
             return rest.lstrip('\n')
     return md
 
 
-def is_ecommerce_url(url: str, exclude_re: re.Pattern | None = None) -> bool:
-    """Return True if the URL looks like an e-commerce or non-book page."""
+def is_excluded_url(url: str, exclude_re: re.Pattern | None = None) -> bool:
+    """Return True if the URL matches an exclusion pattern."""
     if exclude_re and exclude_re.search(url):
         return True
     for pat in _DEFAULT_EXCLUDE_URL_PATTERNS:
@@ -326,7 +371,7 @@ def scrape_page(
     # Remove leading H1 duplicate (title is written in frontmatter)
     markdown = strip_leading_h1(markdown, title)
 
-    # Apply post-conversion cleanup
+    # Apply post-conversion cleanup (CTAs, nav noise, etc.)
     markdown = clean_markdown(markdown)
 
     word_count = count_words(markdown)
@@ -375,11 +420,11 @@ def main():
     parser.add_argument(
         "--exclude", default=None,
         help="Regex: skip pages whose URL matches this pattern (e.g. 'sale|pricing|faq|testimonial'). "
-             "Applied in addition to built-in e-commerce/forum exclusions."
+             "Applied in addition to built-in exclusions."
     )
     parser.add_argument(
         "--no-builtin-excludes", action="store_true",
-        help="Disable built-in URL exclusion patterns (e-commerce, testimonials, forums). "
+        help="Disable built-in URL exclusion patterns (e-commerce, legal, account, testimonials, forums). "
              "Use when the site you are scraping legitimately has these URL segments."
     )
     args = parser.parse_args()
@@ -410,8 +455,8 @@ def main():
     for i, page in enumerate(tqdm(pages, desc="Scraping", unit="page")):
         url = page.get("url", "")
 
-        # URL-based exclusion
-        if not args.no_builtin_excludes and is_ecommerce_url(url, exclude_re):
+        # URL-based exclusion (built-in + user-supplied)
+        if not args.no_builtin_excludes and is_excluded_url(url, exclude_re):
             excluded_url += 1
             tqdm.write(f"  SKIP (excluded URL) {url}")
             index_records.append({
@@ -423,7 +468,7 @@ def main():
                 "error": "excluded: URL pattern matched",
             })
             continue
-        elif exclude_re and exclude_re.search(url):
+        elif args.no_builtin_excludes and exclude_re and exclude_re.search(url):
             excluded_url += 1
             tqdm.write(f"  SKIP (excluded URL) {url}")
             index_records.append({
@@ -497,6 +542,8 @@ def main():
     print(f"  Skipped (sparse/low-value): {sparse_skipped}")
     print(f"  Errors: {len(errors)}")
     print(f"Files saved to: {out_dir}")
+    print(f"\nNext step: inspect a sample before post-processing:")
+    print(f"  python scripts/inspect_sample.py --pages-dir {out_dir} --n 5")
     if errors:
         print(f"Errors logged; see {index_path} for details.")
 
