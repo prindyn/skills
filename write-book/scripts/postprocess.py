@@ -12,13 +12,14 @@ Operations:
                        Merge per-language catalog stubs into one representative page
   --move-code-appendix Tag code-heavy pages (> 60% code) for appendix placement
   --url-to-footnotes   Convert bare inline URLs to Markdown footnotes
+  --strip-ctas         Strip residual CTA/upsell patterns not caught by scrape.py
   --min-content-words  Mark pages below this word count as suppress:true
 
 Usage:
     python postprocess.py --pages-dir pages/ --deduplicate --url-to-footnotes
     python postprocess.py --pages-dir pages/ \\
         --deduplicate --collapse-language-stubs --move-code-appendix \\
-        --url-to-footnotes --min-content-words 150
+        --url-to-footnotes --strip-ctas --min-content-words 150
 """
 
 import argparse
@@ -46,6 +47,35 @@ _LANGUAGE_SLUG_RE = re.compile(
     r'/(' + '|'.join(_LANGUAGE_NAMES) + r')/?$',
     re.IGNORECASE
 )
+
+# CTA/upsell patterns to strip during post-processing
+# These are a second pass for patterns that scrape.py may have missed,
+# especially multi-line upsell blocks that only become visible after
+# HTML→Markdown conversion.
+_CTA_PATTERNS = [
+    (re.compile(r'Tired of reading\?.*?(?=\n\n|\Z)', re.IGNORECASE | re.DOTALL), ''),
+    (re.compile(r'(Get|Download|Buy)\s+(the\s+)?(book|course|ebook|pdf)\s+(now|today|here)\.?\s*\n?', re.IGNORECASE), ''),
+    (re.compile(r'Spring (SALE|Sale).*?\n?', re.IGNORECASE), ''),
+    (re.compile(r'Summer (SALE|Sale).*?\n?', re.IGNORECASE), ''),
+    (re.compile(r'Money-back guarantee.*?\n?', re.IGNORECASE), ''),
+    (re.compile(r'Buy as a gift.*?\n?', re.IGNORECASE), ''),
+    (re.compile(r'(Add to cart|Checkout|Purchase)\s*\n?', re.IGNORECASE), ''),
+    (re.compile(r'Can I buy (on Amazon|this book).*?\n?', re.IGNORECASE), ''),
+    (re.compile(r'How is this better than ChatGPT.*?\n?', re.IGNORECASE), ''),
+    (re.compile(r'Is it on Amazon.*?\n?', re.IGNORECASE), ''),
+    (re.compile(r'P\.?S\.?\s+Track me on (Facebook|Twitter|Instagram).*?\n?', re.IGNORECASE), ''),
+    (re.compile(r'(Follow|Join) me on (Facebook|Twitter|Instagram).*?\n?', re.IGNORECASE), ''),
+    (re.compile(r'Hi,?\s+I\'?m [A-Z][a-z]+,?\s+(I\'?ve been|I\'?m a).*?\n?', re.IGNORECASE), ''),
+    (re.compile(r'Was this (page|article|post)\s+helpful\?.*?\n?', re.IGNORECASE), ''),
+    (re.compile(r'Share this (page|post|article).*?\n?', re.IGNORECASE), ''),
+    (re.compile(r'Copyright\s*©.*?\n?', re.IGNORECASE), ''),
+    (re.compile(r'All rights reserved.*?\n?', re.IGNORECASE), ''),
+    # "In Other Languages" blocks that scrape.py missed (text after CSS stripping)
+    (re.compile(r'In Other Languages\s*\n(\s*[-*]\s*.+\n)+', re.IGNORECASE), ''),
+    (re.compile(r'^In Other Languages\s*$', re.MULTILINE | re.IGNORECASE), ''),
+    # Trailing whitespace
+    (re.compile(r'[ \t]+$', re.MULTILINE), ''),
+]
 
 
 def load_index(pages_dir: Path) -> list[dict]:
@@ -76,7 +106,6 @@ def code_ratio(text: str) -> float:
     total = word_count(text)
     if total == 0:
         return 0.0
-    code_text = re.sub(r'```.*?```', lambda m: m.group(0), text, flags=re.DOTALL)
     code_words = sum(
         word_count(block)
         for block in re.findall(r'```.*?```', text, re.DOTALL)
@@ -86,7 +115,6 @@ def code_ratio(text: str) -> float:
 
 def text_similarity(a: str, b: str) -> float:
     """Return sequence similarity ratio between two strings (0–1)."""
-    # Use a fast approximation: compare normalized word sequences
     words_a = ' '.join(a.lower().split())
     words_b = ' '.join(b.lower().split())
     return SequenceMatcher(None, words_a[:4000], words_b[:4000]).ratio()
@@ -114,6 +142,33 @@ def convert_urls_to_footnotes(md: str) -> str:
         cleaned = cleaned.rstrip() + "\n\n" + "\n".join(footnotes) + "\n"
 
     return cleaned
+
+
+def strip_ctas(pages_dir: Path, index: list[dict]) -> list[dict]:
+    """Apply CTA/upsell pattern stripping to all active pages.
+
+    This is a second-pass cleanup for patterns that scrape.py may have
+    missed — especially multi-line upsell blocks and author self-promotion
+    that only appears as readable text after HTML→Markdown conversion.
+    """
+    print("  CTA/upsell stripping pass...")
+    cleaned = 0
+    for rec in index:
+        if rec.get("error") or rec.get("suppress"):
+            continue
+        path = pages_dir / rec["filename"]
+        text = read_file(path)
+        updated = text
+        for pattern, replacement in _CTA_PATTERNS:
+            updated = pattern.sub(replacement, updated)
+        # Collapse excess blank lines
+        updated = re.sub(r'\n{3,}', '\n\n', updated).strip() + '\n'
+        if updated != text:
+            path.write_text(updated, encoding="utf-8")
+            cleaned += 1
+
+    print(f"    Cleaned CTAs/upsells from {cleaned} pages")
+    return index
 
 
 def deduplicate(pages_dir: Path, index: list[dict], threshold: float = 0.70) -> list[dict]:
@@ -185,7 +240,7 @@ def collapse_language_stubs(pages_dir: Path, index: list[dict], min_langs: int =
     for base_url, group in stub_groups.items():
         if len(group) < min_langs:
             continue
-        # Check that all are stub-like (< 300 words, mostly links)
+        # Check that all are stub-like (< 400 words, mostly links)
         stub_like = []
         for rec in group:
             text = read_file(pages_dir / rec["filename"])
@@ -229,7 +284,8 @@ def tag_code_heavy(pages_dir: Path, index: list[dict], threshold: float = 0.60) 
     """Tag pages where the majority of content is code blocks.
 
     These are candidates to move to an appendix rather than the main narrative.
-    The formatter agent reads the code_heavy flag in _index.json.
+    The formatter agent reads the code_heavy flag in _index.json and should also
+    set xref_chapter to the name of the main chapter this code belongs to.
     """
     print("  Code-heavy page tagging pass...")
     tagged = 0
@@ -241,7 +297,7 @@ def tag_code_heavy(pages_dir: Path, index: list[dict], threshold: float = 0.60) 
             rec["code_heavy"] = True
             tagged += 1
 
-    print(f"    Tagged {tagged} code-heavy pages")
+    print(f"    Tagged {tagged} code-heavy pages (formatter agent should set xref_chapter on these)")
     return index
 
 
@@ -314,6 +370,10 @@ def main():
         help="Convert bare inline http:// URLs to Markdown footnote references"
     )
     parser.add_argument(
+        "--strip-ctas", action="store_true",
+        help="Strip residual CTA/upsell patterns from all pages (second pass after scrape.py)"
+    )
+    parser.add_argument(
         "--min-content-words", type=int, default=0,
         help="Suppress pages with fewer than this many words after cleanup (default: 0 = disabled)"
     )
@@ -326,6 +386,9 @@ def main():
 
     index = load_index(pages_dir)
     print(f"Loaded {len(index)} records from _index.json")
+
+    if args.strip_ctas:
+        index = strip_ctas(pages_dir, index)
 
     if args.deduplicate:
         index = deduplicate(pages_dir, index, threshold=args.deduplicate_threshold)
@@ -350,8 +413,9 @@ def main():
     print(f"\nPost-processing complete.")
     print(f"  Active pages: {active}")
     print(f"  Suppressed:   {suppressed}")
-    print(f"  Code-heavy:   {code_heavy}  (tagged for appendix)")
+    print(f"  Code-heavy:   {code_heavy}  (tagged for appendix — set xref_chapter in formatter agent)")
     print(f"  Index saved:  {pages_dir / '_index.json'}")
+    print(f"\nNext: run the formatter agent, then inspect sample before building PDF.")
 
 
 if __name__ == "__main__":
