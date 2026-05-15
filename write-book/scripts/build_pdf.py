@@ -8,11 +8,19 @@ to PDF via WeasyPrint (primary) or pdfkit (fallback).
 
 Key features:
   - Full table of contents (all chapters and sections, not just top-level)
-  - Alphabetical back-of-book index from H2+ headings
+  - Alphabetical back-of-book index from H2+ headings (curated by default)
   - Running header normalization via --running-header
   - Blank and near-blank page suppression (respects suppress:true in _index.json)
   - Code-heavy page relegation to appendix (respects code_heavy:true)
+  - Cross-references from appendix pages back to their main chapter
   - URL footnote rendering via Python-Markdown footnotes extension
+  - No double page-breaks: section breaks use page-break-before only
+
+Page-break strategy (avoids blank pages):
+  Every section element uses CSS page-break-before: always.
+  Do NOT add <div class="page-break"> between sections — that stacks two
+  consecutive breaks and creates blank pages. The .page-break div is reserved
+  for transitions where the following element has no page-break-before rule.
 
 Usage:
     python build_pdf.py \\
@@ -23,8 +31,8 @@ Usage:
         --output book.pdf \\
         --title "My Book" \\
         --toc-max-depth 3 \\
-        --toc-max-entries 500 \\
-        --generate-index \\
+        --toc-max-entries 300 \\
+        --no-auto-preface \\
         --running-header "My Book" \\
         --target-pages 100
 """
@@ -48,6 +56,16 @@ MARKDOWN_EXTENSIONS = [
     "markdown.extensions.nl2br",
     "markdown.extensions.footnotes",    # [^N]: footnote support
 ]
+
+# Index entries to exclude even when --generate-index is on.
+# These are generic section labels that add noise but no navigational value.
+_GENERIC_INDEX_TERMS = {
+    "example", "examples", "overview", "introduction", "summary",
+    "conclusion", "usage", "see also", "note", "notes", "tip", "tips",
+    "warning", "warnings", "references", "further reading", "next steps",
+    "prerequisites", "requirements", "installation", "setup", "configuration",
+    "troubleshooting", "faq", "frequently asked questions",
+}
 
 
 def md_to_html(text: str) -> tuple[str, str]:
@@ -86,12 +104,13 @@ def extract_headings(html: str, min_level: int = 2, max_level: int = 3) -> list[
 def build_toc_html(
     pages_meta: list[dict],
     max_depth: int = 3,
-    max_entries: int = 500,
+    max_entries: int = 300,
 ) -> str:
     """Build a full HTML table of contents.
 
     Lists every chapter and section up to max_depth and max_entries.
     Chapters in the appendix group are listed under a separate heading.
+    Uses page-break-before in CSS — do not add a page-break div after this element.
     """
     lines = ["<nav id='toc'><h2>Table of Contents</h2><ol class='toc-list'>"]
     count = 0
@@ -120,24 +139,50 @@ def build_toc_html(
     return "\n".join(lines)
 
 
-def build_index_html(all_headings: list[dict]) -> str:
+def build_index_html(
+    all_headings: list[dict],
+    max_entries: int = 0,
+    exclude_terms: set | None = None,
+) -> str:
     """Build an alphabetical back-of-book index from collected headings.
 
     Headings are sorted alphabetically, grouped by first letter, and rendered
     as a two-column index section at the end of the book.
+
+    Generic section labels (example, overview, note, etc.) are filtered out
+    because they add noise without helping readers navigate.
+
+    The index section uses page-break-before in CSS.
     """
     if not all_headings:
         return ""
+
+    filter_set = _GENERIC_INDEX_TERMS.copy()
+    if exclude_terms:
+        filter_set |= {t.lower().strip() for t in exclude_terms}
 
     seen: set[str] = set()
     unique: list[dict] = []
     for h in all_headings:
         key = h["text"].lower().strip()
-        if key not in seen and len(key) > 2:
+        # Filter generic terms and very short entries
+        if key in filter_set or len(key) <= 2:
+            continue
+        if key not in seen:
             seen.add(key)
             unique.append(h)
 
+    if not unique:
+        return ""
+
     unique.sort(key=lambda h: h["text"].lower())
+
+    if max_entries and len(unique) > max_entries:
+        print(
+            f"  Index: trimmed from {len(unique)} to {max_entries} entries "
+            f"(--max-index-entries). Consider --no-index if still noisy."
+        )
+        unique = unique[:max_entries]
 
     parts = [
         "<section id='book-index' class='book-index'>",
@@ -162,6 +207,7 @@ def build_index_html(all_headings: list[dict]) -> str:
 def build_title_page(title: str, root_url: str, date: str, running_header: str) -> str:
     safe_title = title.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     safe_header = running_header.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    # No page-break div after this — the TOC element uses page-break-before in CSS
     return f"""
 <div id="title-page" class="title-page">
   <h1 class="book-title">{safe_title}</h1>
@@ -169,15 +215,20 @@ def build_title_page(title: str, root_url: str, date: str, running_header: str) 
   <!-- running-header meta consumed by CSS string-set -->
   <span class="running-header-value" style="display:none">{safe_header}</span>
 </div>
-<div class="page-break"></div>
 """
 
 
-def build_preface_html(title: str) -> str:
-    """Generate a minimal preface page if no preface page exists in the scraped content."""
+def build_auto_preface_html(title: str) -> str:
+    """Generate a generic preface page (opt-in only, via --auto-preface).
+
+    Prefer writing a real preface as a .md file in the pages directory.
+    A real preface states audience, scope, and how to read the book.
+    Use --auto-preface only if you truly want no preface at all but need
+    a placeholder for formatting purposes.
+    """
     safe = title.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     return f"""
-<section id="preface" class="chapter">
+<section id="auto-preface" class="chapter">
 <h1>Preface</h1>
 <p>This document is a compiled edition of <em>{safe}</em>, assembled for offline reading.
 Content has been organized thematically for a reading experience rather than following
@@ -185,7 +236,6 @@ the original site navigation order.</p>
 <p>Cross-references point to chapter and section titles within this document.
 Source URLs are available in the online edition.</p>
 </section>
-<div class="page-break"></div>
 """
 
 
@@ -243,6 +293,39 @@ def filter_to_target_pages(pages_data: list[dict], target_pages: int) -> list[di
     return result
 
 
+def render_page_section(
+    page: dict,
+    anchor: str,
+    all_headings: list[dict],
+    generate_index: bool,
+) -> str:
+    """Render one page to an HTML section.
+
+    No trailing page-break div is emitted. The CSS page-break-before: always
+    on .chapter handles the break before each new section. Stacking both
+    page-break-after (on a .page-break div) and page-break-before (on .chapter)
+    creates blank pages — use only one mechanism.
+    """
+    content = page["content"]
+
+    # Prepend cross-reference if this page has one (set by formatter agent)
+    xref = page.get("xref_chapter", "")
+    if xref:
+        safe_xref = xref.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        content = f"> **See also:** {safe_xref}\n\n" + content
+
+    html_body, _ = md_to_html(content)
+
+    if generate_index:
+        all_headings.extend(extract_headings(html_body))
+
+    return f"""
+<section id="{anchor}" class="chapter">
+{html_body}
+</section>
+"""
+
+
 def render_full_html(
     title: str,
     root_url: str,
@@ -250,25 +333,29 @@ def render_full_html(
     template: str,
     css: str,
     toc_max_depth: int = 3,
-    toc_max_entries: int = 500,
+    toc_max_entries: int = 300,
     generate_index: bool = True,
+    max_index_entries: int = 0,
     running_header: str = "",
-    include_preface: bool = True,
+    include_auto_preface: bool = False,
+    index_warn_threshold: int = 300,
 ) -> str:
     date_str = datetime.now().strftime("%B %d, %Y")
     effective_header = running_header or title
 
     parts = [build_title_page(title, root_url, date_str, effective_header)]
 
-    # Preface: added only if no page is already classified as a preface/intro
-    has_preface = any(
-        re.search(r'\bpreface\b|\bintroduction\b|\bintro\b', p.get("title", ""), re.IGNORECASE)
-        for p in pages_data
-    )
-    if include_preface and not has_preface:
-        parts.append(build_preface_html(title))
+    # Auto-preface: only when explicitly requested AND no preface page is in content.
+    # Prefer a user-written preface .md file included as the first chapter.
+    if include_auto_preface:
+        has_preface = any(
+            re.search(r'\bpreface\b|\bintroduction\b|\bintro\b', p.get("title", ""), re.IGNORECASE)
+            for p in pages_data
+        )
+        if not has_preface:
+            parts.append(build_auto_preface_html(title))
 
-    # Collect appendix pages (code-heavy, tagged by postprocess.py)
+    # TOC — CSS uses page-break-before: always so no page-break div needed before or after
     main_pages = [p for p in pages_data if not p.get("code_heavy")]
     appendix_pages = [p for p in pages_data if p.get("code_heavy")]
 
@@ -278,46 +365,66 @@ def render_full_html(
         max_entries=toc_max_entries,
     )
     parts.append(toc_html)
-    parts.append('<div class="page-break"></div>')
+    # No page-break div here: the first .chapter uses page-break-before: always
 
     # Collect headings for back-of-book index
     all_headings: list[dict] = []
 
-    def render_page_section(page: dict, anchor: str) -> str:
-        html_body, _ = md_to_html(page["content"])
-        # Collect headings for index
-        if generate_index:
-            all_headings.extend(extract_headings(html_body))
-        return f"""
-<section id="{anchor}" class="chapter">
-{html_body}
-</section>
-<div class="page-break"></div>
-"""
-
-    # Main content
+    # Main content sections — no page-break divs between them
     for i, page in enumerate(main_pages):
-        parts.append(render_page_section(page, f"page-{page['_original_index']}"))
+        parts.append(render_page_section(
+            page, f"page-{page['_original_index']}",
+            all_headings, generate_index,
+        ))
 
-    # Appendix (code-heavy pages)
+    # Appendix header and code-heavy pages
     if appendix_pages:
-        parts.append(
-            '<section class="appendix-header chapter">'
-            '<h1>Appendix: Code Examples</h1>'
-            '<p>The following pages contain extended code listings. '
-            'They are gathered here rather than interspersed in the main text '
-            'to preserve reading flow.</p>'
-            '</section>'
-            '<div class="page-break"></div>'
+        # Build back-reference map: main chapter name → list of appendix page titles
+        main_chapter_names = sorted(
+            {p.get("chapter", "") for p in main_pages if p.get("chapter")},
         )
-        for i, page in enumerate(appendix_pages):
-            parts.append(render_page_section(page, f"page-{page['_original_index']}"))
+
+        appendix_intro = (
+            "<p>The following pages contain extended code listings. "
+            "They are gathered here rather than interspersed in the main text "
+            "to preserve reading flow.</p>"
+        )
+        if main_chapter_names:
+            chapter_list = ", ".join(
+                f"<em>{c}</em>" for c in main_chapter_names[:8]
+            )
+            appendix_intro += (
+                f"<p>Each listing includes a cross-reference back to its main chapter "
+                f"({chapter_list}).</p>"
+            )
+
+        parts.append(
+            "<section class='appendix-header chapter'>"
+            "<h1>Appendix: Code Examples</h1>"
+            f"{appendix_intro}"
+            "</section>"
+            # No page-break div: the first appendix .chapter uses page-break-before
+        )
+        for page in appendix_pages:
+            parts.append(render_page_section(
+                page, f"page-{page['_original_index']}",
+                all_headings, generate_index,
+            ))
 
     # Back-of-book index
+    # The .book-index section has page-break-before: always in CSS — no page-break div needed
     if generate_index:
-        index_html = build_index_html(all_headings)
+        if all_headings and len(all_headings) > index_warn_threshold:
+            print(
+                f"\n  WARNING: Index would have {len(all_headings)} entries — "
+                f"likely too noisy to be useful. "
+                f"Consider --no-index or --max-index-entries {index_warn_threshold}."
+            )
+        index_html = build_index_html(
+            all_headings,
+            max_entries=max_index_entries,
+        )
         if index_html:
-            parts.append('<div class="page-break"></div>')
             parts.append(index_html)
 
     body = "\n".join(parts)
@@ -380,8 +487,8 @@ def main():
         help="Maximum chapter depth shown in the table of contents (default: 3)"
     )
     parser.add_argument(
-        "--toc-max-entries", type=int, default=500,
-        help="Maximum number of entries in the table of contents (default: 500)"
+        "--toc-max-entries", type=int, default=300,
+        help="Maximum number of entries in the table of contents (default: 300)"
     )
     parser.add_argument(
         "--generate-index", action="store_true", default=True,
@@ -392,12 +499,21 @@ def main():
         help="Disable back-of-book index generation"
     )
     parser.add_argument(
+        "--max-index-entries", type=int, default=0,
+        help="Cap the number of index entries (0 = no cap). Use when the index is too noisy."
+    )
+    parser.add_argument(
+        "--index-warn-threshold", type=int, default=300,
+        help="Warn if index would exceed this many entries (default: 300)"
+    )
+    parser.add_argument(
         "--running-header", default="",
         help="Text used as the running header on every page. Defaults to --title."
     )
     parser.add_argument(
-        "--no-preface", action="store_true",
-        help="Do not generate an auto preface page when no preface is found in content"
+        "--auto-preface", action="store_true", default=False,
+        help="Generate a generic auto preface if no preface page is found in content. "
+             "Default OFF — write your own preface as a .md file instead."
     )
     args = parser.parse_args()
 
@@ -443,6 +559,8 @@ def main():
             "url": record.get("url", ""),
             "word_count": record.get("word_count", 0),
             "code_heavy": record.get("code_heavy", False),
+            "chapter": record.get("chapter", ""),
+            "xref_chapter": record.get("xref_chapter", ""),
             "content": content,
             "_original_index": i,
         })
@@ -451,6 +569,10 @@ def main():
     print(f"  {len(pages_data)} pages with content")
     print(f"  {suppressed} pages suppressed (near-blank, duplicate, or flagged)")
     print(f"  {sum(1 for r in index if r.get('error'))} pages with errors (skipped)")
+    print(f"  {sum(1 for p in pages_data if p.get('code_heavy'))} code-heavy pages → appendix")
+    xref_count = sum(1 for p in pages_data if p.get("xref_chapter"))
+    if xref_count:
+        print(f"  {xref_count} appendix pages have cross-references to main chapters")
 
     if args.target_pages > 0:
         pages_data = filter_to_target_pages(pages_data, args.target_pages)
@@ -463,13 +585,17 @@ def main():
         toc_max_depth=args.toc_max_depth,
         toc_max_entries=args.toc_max_entries,
         generate_index=not args.no_index,
+        max_index_entries=args.max_index_entries,
         running_header=args.running_header or book_title,
-        include_preface=not args.no_preface,
+        include_auto_preface=args.auto_preface,
+        index_warn_threshold=args.index_warn_threshold,
     )
 
     html_path = output_path.with_suffix(".html")
     html_path.write_text(html, encoding="utf-8")
     print(f"  HTML written: {html_path} ({html_path.stat().st_size // 1024} KB)")
+    print(f"\n  Inspect the HTML before building the PDF:")
+    print(f"  Open {html_path} and check for blank pages, raw URLs, noise in the first few chapters.")
 
     if args.html_only:
         print("Done (HTML only mode).")
