@@ -47,6 +47,15 @@ Full flag reference for all three pipeline scripts.
 | `--main-selector` | CSS selector | *(auto)* | Force a specific content container |
 | `--delay` | float | `0.3` | Seconds between requests |
 | `--no-verify-ssl` | flag | `false` | Disable SSL certificate verification |
+| `--keep-external-links` | flag | `false` | Keep external link URLs (default: strip URLs, keep text) |
+| `--min-words` | int | `150` | Skip pages with fewer words than this threshold |
+
+### Content quality behavior (always on)
+
+- **HTML comments stripped**: `<!-- ... -->` nodes are removed before text extraction
+- **Comment sections removed**: Disqus, WordPress comments, utterances, giscus blocks are stripped along with other noise elements
+- **External links converted to text**: `[link text](https://external.com)` → `link text` — the URL is dropped to avoid noisy PDF footnotes. Internal (same-domain) links are kept intact.
+- **Sparse pages skipped**: pages with fewer than `--min-words` words are excluded and recorded as errors in `_index.json`
 
 ### Auto content detection
 
@@ -71,6 +80,7 @@ If none match, the entire `<body>` is used.
     "title": "Home",
     "filename": "0000_example_com.md",
     "depth": 0,
+    "word_count": 423,
     "error": null
   }
 ]
@@ -90,6 +100,22 @@ If none match, the entire `<body>` is used.
 | `--title` | str | *(from sitemap root_url)* | Book title shown on title page |
 | `--backend` | choice | `auto` | PDF backend: `weasyprint`, `pdfkit`, or `auto` |
 | `--html-only` | flag | `false` | Stop after generating HTML; skip PDF render |
+| `--target-pages` | int | `0` (off) | Approximate target PDF page count; trims content to fit |
+| `--toc-max-depth` | int | `1` | Maximum chapter depth shown in table of contents |
+| `--toc-max-entries` | int | `30` | Maximum number of TOC entries |
+
+### Table of contents behavior
+
+The TOC is intentionally kept short: only pages at depth ≤ `--toc-max-depth`
+(default: 1) are listed, with a hard cap of `--toc-max-entries` (default: 30).
+This gives readers a navigable overview without listing every sub-page.
+
+### Target pages behavior
+
+When `--target-pages N` is set, the script estimates ~500 words per PDF page
+and drops the lowest-value (shortest) pages until the word budget is met.
+This is a heuristic — actual PDF page count also depends on images, tables,
+and code blocks.
 
 ---
 
@@ -102,8 +128,14 @@ crawl.py and scrape.py plus:
 |---|---|---|---|
 | `--url` | str | *(required)* | Root URL |
 | `--output` | path | `book.pdf` | Final PDF output path |
+| `--target-pages` | int | `0` | Target PDF page count; sets `--max-pages = target*3` for crawl |
+| `--max-pages` | int | `0` | Hard crawl page cap (overrides target-pages derivation if set) |
 | `--work-dir` | path | `write-book-output` | Directory for intermediate files |
 | `--title` | str | *(auto)* | Book title |
 | `--template` | path | `templates/book.html` | HTML template |
 | `--css` | path | `assets/book.css` | CSS |
 | `--backend` | choice | `auto` | PDF backend |
+| `--keep-external-links` | flag | `false` | Keep external link URLs in scraped output |
+| `--min-words` | int | `150` | Minimum word count per scraped page |
+| `--toc-max-depth` | int | `1` | TOC depth cap |
+| `--toc-max-entries` | int | `30` | TOC entry cap |
