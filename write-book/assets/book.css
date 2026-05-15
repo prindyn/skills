@@ -16,7 +16,7 @@
   }
 
   @top-center {
-    content: string(chapter-title);
+    content: string(running-header);
     font-family: Georgia, serif;
     font-size: 9pt;
     color: #999;
@@ -28,13 +28,42 @@
   @top-center    { content: none; }
 }
 
-/* ── Typography ── */
+/* TOC and index pages suppress running header */
+@page toc-page {
+  @top-center { content: "Contents"; font-family: Georgia, serif; font-size: 9pt; color: #999; }
+}
+
+@page index-page {
+  @top-center { content: "Index"; font-family: Georgia, serif; font-size: 9pt; color: #999; }
+}
+
+/* ── Typography — with CJK font fallback ── */
 html, body {
-  font-family: Georgia, "Times New Roman", Times, serif;
+  font-family:
+    Georgia, "Times New Roman", Times,
+    /* CJK fallbacks — installed via fonts-noto-cjk or system fonts */
+    "Noto Serif CJK SC", "Noto Serif SC",
+    "Source Han Serif SC", "Source Han Serif",
+    "PingFang SC", "Songti SC",
+    "Noto Serif CJK TC", "Noto Serif TC",
+    "Noto Serif CJK JP", "Hiragino Mincho Pro",
+    "Noto Serif CJK KR", "Batang",
+    serif;
   font-size: 11pt;
   line-height: 1.7;
   color: #1a1a1a;
   background: #fff;
+}
+
+/* ── Running header value (written by build_pdf.py) ── */
+.running-header-value {
+  display: none;
+  string-set: running-header content();
+}
+
+/* Each chapter H1 also updates the running header */
+h1 {
+  string-set: running-header content();
 }
 
 /* ── Title page ── */
@@ -55,12 +84,8 @@ html, body {
   margin-bottom: 1.5cm;
   border: none;
   padding: 0;
-}
-
-.title-page .book-source {
-  font-size: 11pt;
-  color: #555;
-  margin: 0.3cm 0;
+  /* Title page H1 does NOT set the running header */
+  string-set: none;
 }
 
 .title-page .book-date {
@@ -77,6 +102,7 @@ html, body {
 
 /* ── Table of Contents ── */
 #toc {
+  page: toc-page;
   page-break-after: always;
   break-after: page;
   padding: 1cm 0;
@@ -89,6 +115,14 @@ html, body {
   margin-bottom: 0.8cm;
 }
 
+.toc-section-label {
+  font-size: 13pt;
+  color: #555;
+  margin-top: 0.6cm;
+  margin-bottom: 0.3cm;
+  border-bottom: 1px solid #ccc;
+}
+
 .toc-list {
   list-style: none;
   padding: 0;
@@ -96,7 +130,7 @@ html, body {
 }
 
 .toc-list li {
-  padding: 0.15cm 0;
+  padding: 0.12cm 0;
   font-size: 10.5pt;
   line-height: 1.4;
   border-bottom: 1px dotted #ccc;
@@ -107,7 +141,10 @@ html, body {
   text-decoration: none;
 }
 
-.toc-depth-0 { padding-left: 0;    font-weight: bold; }
+/* Suppress URL display inside TOC links */
+#toc a:after { content: none; }
+
+.toc-depth-0 { padding-left: 0;     font-weight: bold; }
 .toc-depth-1 { padding-left: 0.5cm; }
 .toc-depth-2 { padding-left: 1.0cm; font-size: 10pt; color: #444; }
 .toc-depth-3 { padding-left: 1.5cm; font-size: 9.5pt; color: #666; }
@@ -124,6 +161,11 @@ html, body {
   page-break-before: avoid;
 }
 
+.appendix-header {
+  page-break-before: always;
+  break-before: page;
+}
+
 /* ── Headings ── */
 h1 {
   font-size: 22pt;
@@ -131,7 +173,6 @@ h1 {
   margin: 0 0 0.6cm 0;
   padding-bottom: 0.3cm;
   border-bottom: 2px solid #333;
-  string-set: chapter-title content();
   page-break-after: avoid;
 }
 
@@ -167,19 +208,18 @@ p {
   hyphens: auto;
 }
 
-/* ── Links ── */
+/* ── Links — suppress URL annotation for internal / TOC / index links ── */
 a {
   color: #1a56db;
   text-decoration: none;
 }
 
-a:after {
-  content: " (" attr(href) ")";
-  font-size: 8pt;
-  color: #888;
+/* Show URL for external links in body text */
+a[href^="http"]:after {
+  content: none; /* URLs are converted to footnotes by postprocess.py */
 }
 
-/* Suppress URL display for anchors (internal links) */
+/* Never show URL for anchor links */
 a[href^="#"]:after {
   content: none;
 }
@@ -213,9 +253,11 @@ blockquote p {
   margin: 0;
 }
 
-/* ── Code ── */
+/* ── Code — consistent monospace style ── */
 code {
-  font-family: "Courier New", Courier, monospace;
+  font-family:
+    "Courier New", Courier, monospace,
+    "Noto Sans Mono CJK SC", "Source Han Mono SC";
   font-size: 9pt;
   background: #f4f4f4;
   padding: 0.05cm 0.2cm;
@@ -224,7 +266,9 @@ code {
 }
 
 pre {
-  font-family: "Courier New", Courier, monospace;
+  font-family:
+    "Courier New", Courier, monospace,
+    "Noto Sans Mono CJK SC", "Source Han Mono SC";
   font-size: 8.5pt;
   background: #f6f8fa;
   border: 1px solid #ddd;
@@ -243,6 +287,7 @@ pre code {
   padding: 0;
   color: inherit;
   font-size: inherit;
+  border-radius: 0;
 }
 
 /* Syntax highlight (Pygments "default" theme subset) */
@@ -303,8 +348,75 @@ img {
   margin: 0.4cm auto;
 }
 
-/* ── Source line (italics under chapter title) ── */
-em:first-of-type {
-  color: #777;
-  font-size: 9pt;
+/* ── Footnotes ── */
+.footnote {
+  font-size: 8.5pt;
+  color: #555;
+  border-top: 1px solid #ccc;
+  margin-top: 1cm;
+  padding-top: 0.3cm;
 }
+
+.footnote ol {
+  padding-left: 1.2cm;
+  margin: 0;
+}
+
+.footnote li {
+  margin-bottom: 0.1cm;
+}
+
+/* Footnote back-references */
+a.footnote-ref {
+  vertical-align: super;
+  font-size: 7pt;
+  color: #666;
+}
+
+a.footnote-ref:after { content: none; }
+
+a.footnote-backref:after { content: none; }
+
+/* ── Back-of-book Index ── */
+.book-index {
+  page: index-page;
+  page-break-before: always;
+  break-before: page;
+  padding-top: 0.5cm;
+}
+
+.book-index h1 {
+  font-size: 22pt;
+  margin-bottom: 0.8cm;
+}
+
+.index-columns {
+  column-count: 2;
+  column-gap: 1cm;
+  font-size: 9pt;
+  line-height: 1.5;
+}
+
+.index-letter {
+  font-weight: bold;
+  font-size: 12pt;
+  color: #333;
+  border-bottom: 1px solid #ccc;
+  margin-top: 0.4cm;
+  margin-bottom: 0.1cm;
+  column-span: all;
+  break-after: avoid;
+}
+
+.index-entry {
+  padding: 0.03cm 0;
+  break-inside: avoid;
+}
+
+.index-entry.index-sub {
+  padding-left: 0.5cm;
+  color: #555;
+}
+
+/* Suppress URL display in index */
+.book-index a:after { content: none; }
