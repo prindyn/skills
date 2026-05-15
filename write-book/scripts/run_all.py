@@ -9,7 +9,8 @@ Usage:
     python run_all.py --url https://example.com --output book.pdf
     python run_all.py --url https://docs.example.com \
         --title "Example Docs" \
-        --max-depth 4 --max-pages 200 \
+        --target-pages 100 \
+        --max-depth 4 \
         --output example-docs.pdf \
         --work-dir /tmp/write-book-example
 """
@@ -36,8 +37,14 @@ def main():
     parser.add_argument("--url", required=True, help="Root URL to crawl")
     parser.add_argument("--output", default="book.pdf", help="Output PDF path")
     parser.add_argument("--title", default="", help="Book title")
+    parser.add_argument(
+        "--target-pages", type=int, default=0,
+        help="Approximate target PDF page count. Sets --max-pages = target*3 for crawling "
+             "and trims low-value pages in build step to approach the target."
+    )
     parser.add_argument("--max-depth", type=int, default=5)
-    parser.add_argument("--max-pages", type=int, default=500)
+    parser.add_argument("--max-pages", type=int, default=0,
+                        help="Hard cap on crawled pages (overrides target-pages calculation if set)")
     parser.add_argument("--include", default=None, help="URL include regex")
     parser.add_argument("--exclude", default=None, help="URL exclude regex")
     parser.add_argument("--main-selector", default=None, help="CSS selector for main content")
@@ -48,6 +55,22 @@ def main():
     parser.add_argument("--work-dir", default="write-book-output", help="Working directory for intermediate files")
     parser.add_argument("--template", default=None, help="Custom HTML template path")
     parser.add_argument("--css", default=None, help="Custom CSS path")
+    parser.add_argument(
+        "--keep-external-links", action="store_true",
+        help="Keep external link URLs in scraped content (default: strip, keep link text only)"
+    )
+    parser.add_argument(
+        "--min-words", type=int, default=150,
+        help="Minimum word count for a page to be included (default: 150)"
+    )
+    parser.add_argument(
+        "--toc-max-depth", type=int, default=1,
+        help="Maximum depth shown in table of contents (default: 1)"
+    )
+    parser.add_argument(
+        "--toc-max-entries", type=int, default=30,
+        help="Maximum entries in table of contents (default: 30)"
+    )
     args = parser.parse_args()
 
     here = Path(__file__).parent
@@ -58,12 +81,22 @@ def main():
     template = args.template or str(here.parent / "templates" / "book.html")
     css = args.css or str(here.parent / "assets" / "book.css")
 
+    # Determine max-pages for the crawl step
+    # If --target-pages is set and --max-pages not explicitly given, derive it
+    if args.target_pages > 0 and args.max_pages == 0:
+        max_pages = args.target_pages * 3
+        print(f"target-pages={args.target_pages} → crawling up to {max_pages} source pages")
+    elif args.max_pages > 0:
+        max_pages = args.max_pages
+    else:
+        max_pages = 500  # default
+
     # Step 1: Crawl
     crawl_cmd = [
         sys.executable, str(here / "crawl.py"),
         "--url", args.url,
         "--max-depth", str(args.max_depth),
-        "--max-pages", str(args.max_pages),
+        "--max-pages", str(max_pages),
         "--delay", str(args.delay),
         "--output", str(sitemap),
     ]
@@ -83,11 +116,14 @@ def main():
         "--sitemap", str(sitemap),
         "--output", str(pages_dir),
         "--delay", str(args.delay),
+        "--min-words", str(args.min_words),
     ]
     if args.main_selector:
         scrape_cmd += ["--main-selector", args.main_selector]
     if args.no_verify_ssl:
         scrape_cmd.append("--no-verify-ssl")
+    if args.keep_external_links:
+        scrape_cmd.append("--keep-external-links")
     run(scrape_cmd, "Step 2/3: Scrape content")
 
     # Step 3: Build PDF
@@ -99,9 +135,13 @@ def main():
         "--css", css,
         "--output", args.output,
         "--backend", args.backend,
+        "--toc-max-depth", str(args.toc_max_depth),
+        "--toc-max-entries", str(args.toc_max_entries),
     ]
     if args.title:
         build_cmd += ["--title", args.title]
+    if args.target_pages > 0:
+        build_cmd += ["--target-pages", str(args.target_pages)]
     run(build_cmd, "Step 3/3: Build PDF")
 
     print(f"\nAll done! Book written to: {args.output}")
