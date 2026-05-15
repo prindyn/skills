@@ -19,6 +19,7 @@ By default:
   - Orphan sidebar/navigation file-tree lines are removed
   - Multi-language sales banners are removed
   - External links are replaced with their link text (URL dropped)
+  - Images are stripped by default; use --keep-images to preserve image references
   - The leading H1 in scraped body is deduplicated (it is written once in frontmatter)
   - Pages with fewer than --min-words words are skipped as low-value
   - Pages whose URL matches --exclude are skipped
@@ -29,7 +30,7 @@ Usage:
                      --main-selector "article.content" --delay 0.3
     python scrape.py --sitemap sitemap.json --output pages/ \\
                      --exclude "(sale|pricing|testimonial|faq|forum)" \\
-                     --keep-external-links --min-words 200
+                     --keep-external-links --keep-images --min-words 200
 """
 
 import argparse
@@ -225,10 +226,10 @@ _DEFAULT_EXCLUDE_URL_PATTERNS = [
 ]
 
 
-def configure_html2text() -> html2text.HTML2Text:
+def configure_html2text(keep_images: bool = False) -> html2text.HTML2Text:
     h = html2text.HTML2Text()
     h.ignore_links = False
-    h.ignore_images = True
+    h.ignore_images = not keep_images  # preserve image refs when --keep-images is set
     h.body_width = 0          # don't hard-wrap lines
     h.protect_links = True
     h.wrap_links = False
@@ -319,8 +320,8 @@ def count_words(text: str) -> int:
     return len(text.split())
 
 
-def html_to_markdown(html_fragment: str) -> str:
-    converter = configure_html2text()
+def html_to_markdown(html_fragment: str, keep_images: bool = False) -> str:
+    converter = configure_html2text(keep_images=keep_images)
     md = converter.handle(html_fragment)
     md = re.sub(r"\n{3,}", "\n\n", md)
     return md.strip()
@@ -333,6 +334,7 @@ def scrape_page(
     no_verify_ssl: bool = False,
     root_domain: str | None = None,
     keep_external_links: bool = False,
+    keep_images: bool = False,
     min_words: int = 150,
 ) -> dict:
     try:
@@ -362,7 +364,7 @@ def scrape_page(
     main = find_main_content(soup, main_selector)
     main = strip_html_comments(main)
     main = strip_noise(main)
-    markdown = html_to_markdown(str(main))
+    markdown = html_to_markdown(str(main), keep_images=keep_images)
 
     # Drop external link URLs, keeping only the visible text
     if not keep_external_links:
@@ -414,6 +416,12 @@ def main():
         help="Keep external link URLs in output (default: strip URLs, keep link text only)"
     )
     parser.add_argument(
+        "--keep-images", action="store_true",
+        help="Preserve image references (![alt](url)) in Markdown output. "
+             "By default images are stripped. Use with fetch_images.py to download "
+             "and filter images after scraping."
+    )
+    parser.add_argument(
         "--min-words", type=int, default=150,
         help="Minimum word count to include a page (default: 150; lower = include sparser pages)"
     )
@@ -446,6 +454,10 @@ def main():
 
     session = requests.Session()
     session.headers.update(DEFAULT_HEADERS)
+
+    if args.keep_images:
+        print("  --keep-images enabled: image references will be preserved in Markdown output.")
+        print("  Run fetch_images.py after scraping to download and filter images.")
 
     index_records = []
     errors = []
@@ -487,6 +499,7 @@ def main():
             no_verify_ssl=args.no_verify_ssl,
             root_domain=root_domain,
             keep_external_links=args.keep_external_links,
+            keep_images=args.keep_images,
             min_words=args.min_words,
         )
 
@@ -542,8 +555,12 @@ def main():
     print(f"  Skipped (sparse/low-value): {sparse_skipped}")
     print(f"  Errors: {len(errors)}")
     print(f"Files saved to: {out_dir}")
-    print(f"\nNext step: inspect a sample before post-processing:")
-    print(f"  python scripts/inspect_sample.py --pages-dir {out_dir} --n 5")
+    if args.keep_images:
+        print(f"\nImages preserved in Markdown. Next step: run fetch_images.py to download:")
+        print(f"  python scripts/fetch_images.py --pages-dir {out_dir} --images-dir crawl_output/images/ --root-url <URL>")
+    else:
+        print(f"\nNext step: inspect a sample before post-processing:")
+        print(f"  python scripts/inspect_sample.py --pages-dir {out_dir} --n 5")
     if errors:
         print(f"Errors logged; see {index_path} for details.")
 
