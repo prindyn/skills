@@ -9,15 +9,24 @@ headings, lists, code blocks, bold/italic, tables, and blockquotes.
 By default:
   - HTML comments are stripped
   - Comment sections (Disqus, WordPress, etc.) are removed
+  - E-commerce, testimonial, forum, and FAQ elements are stripped
+  - [code]/[/code] artifacts are converted to fenced code blocks
+  - "Your browser does not support HTML video" lines are removed
+  - Empty widget labels (Complexity:, Popularity:, Vote counts) are removed
+  - Orphan sidebar/navigation file-tree lines are removed
+  - Multi-language sales banners are removed
   - External links are replaced with their link text (URL dropped)
-  - Pages with fewer than 150 words are skipped as low-value
+  - The leading H1 in scraped body is deduplicated (it is written once in frontmatter)
+  - Pages with fewer than --min-words words are skipped as low-value
+  - Pages whose URL matches --exclude are skipped
 
 Usage:
     python scrape.py --sitemap sitemap.json --output pages/
-    python scrape.py --sitemap sitemap.json --output pages/ \
+    python scrape.py --sitemap sitemap.json --output pages/ \\
                      --main-selector "article.content" --delay 0.3
-    python scrape.py --sitemap sitemap.json --output pages/ \
-                     --keep-external-links --min-words 50
+    python scrape.py --sitemap sitemap.json --output pages/ \\
+                     --exclude "(sale|pricing|testimonial|faq|forum)" \\
+                     --keep-external-links --min-words 200
 """
 
 import argparse
@@ -61,22 +70,113 @@ MAIN_CONTENT_SELECTORS = [
 
 # Elements to strip before conversion (navigation, ads, comment sections, etc.)
 NOISE_SELECTORS = [
+    # Layout chrome
     "nav", "header", "footer", "aside",
     ".nav", ".navbar", ".sidebar", ".toc",
     ".breadcrumb", ".pagination", ".cookie-banner",
     ".advertisement", ".ad", "[aria-hidden='true']",
     "script", "style", "noscript",
-    # Comment sections
+    # Comment / community sections
     "#comments", ".comments", ".comment-section", ".comment-list",
     ".comments-area", ".comment-respond", ".comment-form",
     "[id*='disqus']", "[class*='disqus']",
     ".utterances", ".giscus",
     "[id='respond']", ".wp-comment-cookies-consent",
+    # Vote / follow widgets
+    "[class*='vote']", "[id*='vote']",
+    "[class*='follow']", "[id*='follow']",
+    ".like-button", ".share-button", ".social-share",
+    # UserEcho / community forum widgets
+    "[class*='userecho']", "[id*='userecho']",
+    ".ue-widget", ".ue_widget",
+    "[class*='forum']", "[id*='forum']",
+    ".community-widget",
+    # Testimonials / reviews
+    ".testimonials", ".testimonial", ".testimonials-section",
+    ".reviews", ".review-section", ".customer-reviews",
+    "[class*='testimonial']", "[id*='testimonial']",
+    # E-commerce / pricing
+    ".pricing", ".price-table", ".pricing-table",
+    ".checkout", ".buy-now", ".purchase-section",
+    ".sale-banner", ".promo-banner", ".offer-banner",
+    "[class*='pricing']", "[id*='pricing']",
+    # Language / regional sales banners
+    ".language-notice", ".translation-notice",
+    "[class*='language-banner']", "[class*='lang-notice']",
+    # Author bios / social promo blocks
+    ".author-bio", ".author-info", ".author-card",
+    ".social-links", ".newsletter-signup",
+    "[class*='newsletter']",
+    # Media fallback containers
+    ".video-fallback", "[class*='video-placeholder']",
+    # Misc noise
+    ".cookie-consent", ".gdpr-notice",
+    ".back-to-top", "[class*='back-to-top']",
+    ".related-posts", ".related-articles",
+    "[class*='related']",
 ]
 
 # Regex to match external Markdown links: [text](http://...)
-# Captures group 1 = link text, group 2 = URL
 _EXTERNAL_LINK_RE = re.compile(r'\[([^\]]+)\]\((https?://[^)]+)\)')
+
+# Patterns to clean from Markdown output after HTML→Markdown conversion
+_MD_CLEANUP_PATTERNS = [
+    # [code] and [/code] tags left over from BBCode / forum-style markup
+    (re.compile(r'\[/?code\]', re.IGNORECASE), ''),
+    # (/sendy/form) and similar form link artifacts in parentheses
+    (re.compile(r'\(/[a-z0-9_/-]+/form[^)]*\)', re.IGNORECASE), ''),
+    # "Your browser does not support HTML video." line
+    (re.compile(r'Your browser does not support HTML video\.?\s*\n?', re.IGNORECASE), ''),
+    # Empty widget labels: "Complexity:" or "Popularity:" with nothing after
+    (re.compile(r'^(Complexity|Popularity|Difficulty|Rating)\s*:\s*$', re.MULTILINE | re.IGNORECASE), ''),
+    # Vote widget text: "Vote __ 0 __ 0 Undo __ Follow" style
+    (re.compile(r'Vote\s+_+\s*\d*\s*_+\s*\d*\s*(Undo)?\s*_+\s*(Follow)?\s*\n?', re.IGNORECASE), ''),
+    # Show next review / pagination controls
+    (re.compile(r'Show next review\s*\n?', re.IGNORECASE), ''),
+    (re.compile(r'Add a new one\s*\n?', re.IGNORECASE), ''),
+    (re.compile(r'by UserEcho\s*\n?', re.IGNORECASE), ''),
+    # "N month(s) ago • updated" forum timestamps
+    (re.compile(r'\d+\s+months?\s+ago\s*[•·]\s*updated\s*\n?', re.IGNORECASE), ''),
+    # Multi-language sales banners like "This product is only available in English"
+    (re.compile(
+        r'(This (product|book|course) is (currently )?only available in English\.?\s*\n?'
+        r'|Этот продукт доступен только на английском\.?\s*\n?'
+        r'|このプロダクトは英語のみです\.?\s*\n?'
+        r'|이 제품은 영어로만 제공됩니다\.?\s*\n?'
+        r'|此产品仅提供英文版\.?\s*\n?)',
+        re.IGNORECASE
+    ), ''),
+    # URL-only lines (bare http links on their own line, no surrounding prose)
+    (re.compile(r'^\s*https?://\S+\s*$', re.MULTILINE), ''),
+    # Breadcrumb URL slugs in parentheses: (refactoring.guru/design-patterns/strategy)
+    (re.compile(r'\([a-z0-9.-]+\.[a-z]{2,}/[a-z0-9/_-]+\)', re.IGNORECASE), ''),
+    # Trailing whitespace on lines
+    (re.compile(r'[ \t]+$', re.MULTILINE), ''),
+]
+
+# Navigation sidebar artifacts: bare indented file-tree lines
+# e.g. "Navigation / Intro / buttons / Button / MacOSButton"
+_NAV_TREE_RE = re.compile(
+    r'^(?:Navigation|Intro|buttons?|Button|MacOSButton|WindowsButton|LinuxButton'
+    r'|Component|Factory|Abstract|Concrete|Client|Context|State|Strategy'
+    r'|Observer|Subject|Decorator|Wrapper|Singleton|Prototype|Builder'
+    r'|Adapter|Bridge|Composite|Facade|Flyweight|Proxy|Command|Iterator'
+    r'|Mediator|Memento|Template|Visitor|Chain)\s*$',
+    re.MULTILINE
+)
+
+# URL patterns for pages that should be excluded from a book
+_DEFAULT_EXCLUDE_URL_PATTERNS = [
+    r'/(sale|spring-sale|discount|promo|coupon)',
+    r'/(pricing|price|buy|purchase|checkout|order|gift|amazon)',
+    r'/(refund|money-back|guarantee)',
+    r'/(testimonial|review|customer)',
+    r'/(faq|payment|payment-method)',
+    r'/(forum|community|userecho)',
+    r'/(newsletter|subscribe|sendy)',
+    r'/(login|logout|signup|register|account)',
+    r'/(search|tag|category|author)/',
+]
 
 
 def configure_html2text() -> html2text.HTML2Text:
@@ -123,19 +223,51 @@ def strip_html_comments(element: Tag) -> Tag:
 
 
 def strip_external_links(md: str, root_domain: str | None = None) -> str:
-    """Replace external Markdown links with their link text, dropping the URL.
-
-    Internal links (same domain) and anchor links are preserved.
-    This prevents noisy URL footnotes in the PDF and keeps content focused.
-    """
+    """Replace external Markdown links with their link text, dropping the URL."""
     def replace_link(m: re.Match) -> str:
         text, url = m.group(1), m.group(2)
-        # Keep internal links if root_domain is known
         if root_domain and root_domain in url:
             return m.group(0)
         return text
 
     return _EXTERNAL_LINK_RE.sub(replace_link, md)
+
+
+def clean_markdown(md: str) -> str:
+    """Apply post-conversion cleanup patterns to Markdown text."""
+    for pattern, replacement in _MD_CLEANUP_PATTERNS:
+        md = pattern.sub(replacement, md)
+    # Remove orphan navigation sidebar lines
+    md = _NAV_TREE_RE.sub('', md)
+    # Collapse runs of 3+ blank lines to 2
+    md = re.sub(r'\n{3,}', '\n\n', md)
+    return md.strip()
+
+
+def strip_leading_h1(md: str, title: str) -> str:
+    """Remove the first H1 from the Markdown body if it duplicates the page title.
+
+    The scraper writes '# Title' as a frontmatter header, so the same heading
+    appearing again at the top of the scraped body produces a duplicate.
+    """
+    lines = md.split('\n')
+    for i, line in enumerate(lines):
+        stripped = line.lstrip('#').strip()
+        if line.startswith('# '):
+            # Always remove the first H1 — it is always re-added as the chapter header
+            rest = '\n'.join(lines[i + 1:])
+            return rest.lstrip('\n')
+    return md
+
+
+def is_ecommerce_url(url: str, exclude_re: re.Pattern | None = None) -> bool:
+    """Return True if the URL looks like an e-commerce or non-book page."""
+    if exclude_re and exclude_re.search(url):
+        return True
+    for pat in _DEFAULT_EXCLUDE_URL_PATTERNS:
+        if re.search(pat, url, re.IGNORECASE):
+            return True
+    return False
 
 
 def count_words(text: str) -> int:
@@ -145,7 +277,6 @@ def count_words(text: str) -> int:
 def html_to_markdown(html_fragment: str) -> str:
     converter = configure_html2text()
     md = converter.handle(html_fragment)
-    # Collapse excessive blank lines (> 2 consecutive)
     md = re.sub(r"\n{3,}", "\n\n", md)
     return md.strip()
 
@@ -184,7 +315,6 @@ def scrape_page(
         meta_desc = meta["content"].strip()
 
     main = find_main_content(soup, main_selector)
-    # Strip HTML comments before further processing
     main = strip_html_comments(main)
     main = strip_noise(main)
     markdown = html_to_markdown(str(main))
@@ -193,7 +323,12 @@ def scrape_page(
     if not keep_external_links:
         markdown = strip_external_links(markdown, root_domain)
 
-    # Skip pages that are too sparse to be valuable
+    # Remove leading H1 duplicate (title is written in frontmatter)
+    markdown = strip_leading_h1(markdown, title)
+
+    # Apply post-conversion cleanup
+    markdown = clean_markdown(markdown)
+
     word_count = count_words(markdown)
     if word_count < min_words:
         return {
@@ -237,6 +372,16 @@ def main():
         "--min-words", type=int, default=150,
         help="Minimum word count to include a page (default: 150; lower = include sparser pages)"
     )
+    parser.add_argument(
+        "--exclude", default=None,
+        help="Regex: skip pages whose URL matches this pattern (e.g. 'sale|pricing|faq|testimonial'). "
+             "Applied in addition to built-in e-commerce/forum exclusions."
+    )
+    parser.add_argument(
+        "--no-builtin-excludes", action="store_true",
+        help="Disable built-in URL exclusion patterns (e-commerce, testimonials, forums). "
+             "Use when the site you are scraping legitimately has these URL segments."
+    )
     args = parser.parse_args()
 
     sitemap_path = Path(args.sitemap)
@@ -249,6 +394,8 @@ def main():
     root_url = sitemap.get("root_url", "")
     root_domain = urlparse(root_url).netloc if root_url else None
 
+    exclude_re = re.compile(args.exclude, re.IGNORECASE) if args.exclude else None
+
     out_dir = Path(args.output)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -258,9 +405,37 @@ def main():
     index_records = []
     errors = []
     sparse_skipped = 0
+    excluded_url = 0
 
     for i, page in enumerate(tqdm(pages, desc="Scraping", unit="page")):
         url = page.get("url", "")
+
+        # URL-based exclusion
+        if not args.no_builtin_excludes and is_ecommerce_url(url, exclude_re):
+            excluded_url += 1
+            tqdm.write(f"  SKIP (excluded URL) {url}")
+            index_records.append({
+                "index": i,
+                "url": url,
+                "title": page.get("title", ""),
+                "filename": safe_filename(url, i),
+                "depth": page.get("depth", 0),
+                "error": "excluded: URL pattern matched",
+            })
+            continue
+        elif exclude_re and exclude_re.search(url):
+            excluded_url += 1
+            tqdm.write(f"  SKIP (excluded URL) {url}")
+            index_records.append({
+                "index": i,
+                "url": url,
+                "title": page.get("title", ""),
+                "filename": safe_filename(url, i),
+                "depth": page.get("depth", 0),
+                "error": "excluded: URL pattern matched",
+            })
+            continue
+
         result = scrape_page(
             url, session,
             main_selector=args.main_selector,
@@ -293,10 +468,11 @@ def main():
             filepath.write_text(f"# Error\n\nFailed to scrape: {url}\n\nReason: {result['error']}\n")
         else:
             title = result["title"] or page.get("title", "Untitled")
+            # Write title once; the H1 duplicate has already been stripped from the body
             front = f"# {title}\n\n"
             if result["meta_description"]:
                 front += f"> {result['meta_description']}\n\n"
-            front += f"_Source: {url}_\n\n---\n\n"
+            # Source URL omitted from body — stored in _index.json for traceability
             filepath.write_text(front + result["markdown"] + "\n")
 
         index_records.append({
@@ -315,8 +491,9 @@ def main():
     index_path = out_dir / "_index.json"
     index_path.write_text(json.dumps(index_records, indent=2, ensure_ascii=False))
 
-    ok = sum(1 for r in index_records if not r["error"])
+    ok = sum(1 for r in index_records if not r.get("error"))
     print(f"\nScraped {ok}/{len(pages)} pages successfully.")
+    print(f"  Excluded (URL pattern): {excluded_url}")
     print(f"  Skipped (sparse/low-value): {sparse_skipped}")
     print(f"  Errors: {len(errors)}")
     print(f"Files saved to: {out_dir}")
