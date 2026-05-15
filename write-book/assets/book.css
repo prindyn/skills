@@ -1,6 +1,13 @@
 /* ═══════════════════════════════════════════════════════
    write-book — PDF Book Stylesheet
    Works with WeasyPrint and pdfkit / wkhtmltopdf.
+
+   Page-break strategy:
+   Every section that must start on a new page uses page-break-before: always.
+   Do NOT stack page-break-after (on a .page-break div) with page-break-before
+   (on .chapter) — two consecutive page breaks create a blank page.
+   The .page-break class is kept for manual use in templates but is not
+   generated between chapter sections by build_pdf.py.
    ═══════════════════════════════════════════════════════ */
 
 /* ── Page setup (WeasyPrint / CSS Paged Media) ── */
@@ -95,6 +102,13 @@ h1 {
 }
 
 /* ── Page breaks ── */
+
+/*
+  .page-break is kept for manual use (e.g. after the title page in templates)
+  but is NOT generated between chapter sections by build_pdf.py.
+  Chapter sections use page-break-before: always instead, which avoids
+  double-break blank pages.
+*/
 .page-break {
   page-break-after: always;
   break-after: page;
@@ -103,8 +117,13 @@ h1 {
 /* ── Table of Contents ── */
 #toc {
   page: toc-page;
-  page-break-after: always;
-  break-after: page;
+  /* page-break-before instead of page-break-after:
+     The preceding title page has no page-break-after, so we need
+     page-break-before here to start the TOC on its own page.
+     Using page-break-after on #toc would cause a double break
+     with the first .chapter page-break-before, creating a blank page. */
+  page-break-before: always;
+  break-before: page;
   padding: 1cm 0;
 }
 
@@ -151,14 +170,16 @@ h1 {
 .toc-depth-4 { padding-left: 2.0cm; font-size: 9pt;   color: #888; }
 
 /* ── Chapter / section ── */
+/*
+  page-break-before: always ensures every .chapter starts on a new page.
+  build_pdf.py does NOT emit a <div class="page-break"> after each section —
+  that would stack two consecutive breaks (page-break-after + page-break-before)
+  and produce blank pages between every chapter.
+*/
 .chapter {
   page-break-before: always;
   break-before: page;
   padding-top: 0.5cm;
-}
-
-.chapter:first-child {
-  page-break-before: avoid;
 }
 
 .appendix-header {
@@ -214,9 +235,9 @@ a {
   text-decoration: none;
 }
 
-/* Show URL for external links in body text */
+/* URLs are converted to footnotes by postprocess.py — do not annotate links */
 a[href^="http"]:after {
-  content: none; /* URLs are converted to footnotes by postprocess.py */
+  content: none;
 }
 
 /* Never show URL for anchor links */
