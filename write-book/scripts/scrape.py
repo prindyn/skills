@@ -6,10 +6,18 @@ Reads a sitemap JSON produced by crawl.py, fetches each page,
 extracts the main content, and saves it as Markdown preserving
 headings, lists, code blocks, bold/italic, tables, and blockquotes.
 
+By default:
+  - HTML comments are stripped
+  - Comment sections (Disqus, WordPress, etc.) are removed
+  - External links are replaced with their link text (URL dropped)
+  - Pages with fewer than 150 words are skipped as low-value
+
 Usage:
     python scrape.py --sitemap sitemap.json --output pages/
     python scrape.py --sitemap sitemap.json --output pages/ \
                      --main-selector "article.content" --delay 0.3
+    python scrape.py --sitemap sitemap.json --output pages/ \
+                     --keep-external-links --min-words 50
 """
 
 import argparse
@@ -18,10 +26,11 @@ import re
 import sys
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 import html2text
 import requests
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup, Comment, Tag
 from tqdm import tqdm
 
 
@@ -50,14 +59,24 @@ MAIN_CONTENT_SELECTORS = [
     "#main-content",
 ]
 
-# Elements to strip before conversion (navigation, ads, etc.)
+# Elements to strip before conversion (navigation, ads, comment sections, etc.)
 NOISE_SELECTORS = [
     "nav", "header", "footer", "aside",
     ".nav", ".navbar", ".sidebar", ".toc",
     ".breadcrumb", ".pagination", ".cookie-banner",
     ".advertisement", ".ad", "[aria-hidden='true']",
     "script", "style", "noscript",
+    # Comment sections
+    "#comments", ".comments", ".comment-section", ".comment-list",
+    ".comments-area", ".comment-respond", ".comment-form",
+    "[id*='disqus']", "[class*='disqus']",
+    ".utterances", ".giscus",
+    "[id='respond']", ".wp-comment-cookies-consent",
 ]
+
+# Regex to match external Markdown links: [text](http://...)
+# Captures group 1 = link text, group 2 = URL
+_EXTERNAL_LINK_RE = re.compile(r'\[([^\]]+)\]\((https?://[^)]+)\)')
 
 
 def configure_html2text() -> html2text.HTML2Text:
@@ -96,6 +115,33 @@ def strip_noise(element: Tag) -> Tag:
     return element
 
 
+def strip_html_comments(element: Tag) -> Tag:
+    """Remove all HTML comment nodes (<!-- ... -->) from the element tree."""
+    for comment in element.find_all(text=lambda text: isinstance(text, Comment)):
+        comment.extract()
+    return element
+
+
+def strip_external_links(md: str, root_domain: str | None = None) -> str:
+    """Replace external Markdown links with their link text, dropping the URL.
+
+    Internal links (same domain) and anchor links are preserved.
+    This prevents noisy URL footnotes in the PDF and keeps content focused.
+    """
+    def replace_link(m: re.Match) -> str:
+        text, url = m.group(1), m.group(2)
+        # Keep internal links if root_domain is known
+        if root_domain and root_domain in url:
+            return m.group(0)
+        return text
+
+    return _EXTERNAL_LINK_RE.sub(replace_link, md)
+
+
+def count_words(text: str) -> int:
+    return len(text.split())
+
+
 def html_to_markdown(html_fragment: str) -> str:
     converter = configure_html2text()
     md = converter.handle(html_fragment)
@@ -109,6 +155,9 @@ def scrape_page(
     session: requests.Session,
     main_selector: str | None = None,
     no_verify_ssl: bool = False,
+    root_domain: str | None = None,
+    keep_external_links: bool = False,
+    min_words: int = 150,
 ) -> dict:
     try:
         resp = session.get(url, timeout=20, verify=not no_verify_ssl)
@@ -135,14 +184,30 @@ def scrape_page(
         meta_desc = meta["content"].strip()
 
     main = find_main_content(soup, main_selector)
+    # Strip HTML comments before further processing
+    main = strip_html_comments(main)
     main = strip_noise(main)
     markdown = html_to_markdown(str(main))
+
+    # Drop external link URLs, keeping only the visible text
+    if not keep_external_links:
+        markdown = strip_external_links(markdown, root_domain)
+
+    # Skip pages that are too sparse to be valuable
+    word_count = count_words(markdown)
+    if word_count < min_words:
+        return {
+            "error": f"Sparse page ({word_count} words, min {min_words})",
+            "markdown": "",
+            "sparse": True,
+        }
 
     return {
         "title": title,
         "meta_description": meta_desc,
         "url": resp.url,
         "markdown": markdown,
+        "word_count": word_count,
         "error": None,
     }
 
@@ -164,6 +229,14 @@ def main():
     parser.add_argument("--main-selector", default=None, help="CSS selector for main content")
     parser.add_argument("--delay", type=float, default=0.3, help="Seconds between requests")
     parser.add_argument("--no-verify-ssl", action="store_true", help="Skip SSL certificate verification")
+    parser.add_argument(
+        "--keep-external-links", action="store_true",
+        help="Keep external link URLs in output (default: strip URLs, keep link text only)"
+    )
+    parser.add_argument(
+        "--min-words", type=int, default=150,
+        help="Minimum word count to include a page (default: 150; lower = include sparser pages)"
+    )
     args = parser.parse_args()
 
     sitemap_path = Path(args.sitemap)
@@ -173,6 +246,9 @@ def main():
 
     sitemap = json.loads(sitemap_path.read_text())
     pages = sitemap.get("pages", [])
+    root_url = sitemap.get("root_url", "")
+    root_domain = urlparse(root_url).netloc if root_url else None
+
     out_dir = Path(args.output)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -181,13 +257,35 @@ def main():
 
     index_records = []
     errors = []
+    sparse_skipped = 0
 
     for i, page in enumerate(tqdm(pages, desc="Scraping", unit="page")):
         url = page.get("url", "")
-        result = scrape_page(url, session, args.main_selector, args.no_verify_ssl)
+        result = scrape_page(
+            url, session,
+            main_selector=args.main_selector,
+            no_verify_ssl=args.no_verify_ssl,
+            root_domain=root_domain,
+            keep_external_links=args.keep_external_links,
+            min_words=args.min_words,
+        )
 
         filename = safe_filename(url, i)
         filepath = out_dir / filename
+
+        if result.get("sparse"):
+            sparse_skipped += 1
+            tqdm.write(f"  SKIP (sparse) {url} — {result['error']}")
+            index_records.append({
+                "index": i,
+                "url": url,
+                "title": page.get("title", ""),
+                "filename": filename,
+                "depth": page.get("depth", 0),
+                "error": result["error"],
+            })
+            time.sleep(args.delay)
+            continue
 
         if result["error"]:
             errors.append({"url": url, "error": result["error"]})
@@ -207,6 +305,7 @@ def main():
             "title": result.get("title") or page.get("title", ""),
             "filename": filename,
             "depth": page.get("depth", 0),
+            "word_count": result.get("word_count", 0),
             "error": result.get("error"),
         })
 
@@ -217,7 +316,9 @@ def main():
     index_path.write_text(json.dumps(index_records, indent=2, ensure_ascii=False))
 
     ok = sum(1 for r in index_records if not r["error"])
-    print(f"\nScraped {ok}/{len(pages)} pages successfully. {len(errors)} errors.")
+    print(f"\nScraped {ok}/{len(pages)} pages successfully.")
+    print(f"  Skipped (sparse/low-value): {sparse_skipped}")
+    print(f"  Errors: {len(errors)}")
     print(f"Files saved to: {out_dir}")
     if errors:
         print(f"Errors logged; see {index_path} for details.")
