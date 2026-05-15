@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-run_all.py — One-shot pipeline: crawl → scrape → post-process → build PDF.
+run_all.py — One-shot pipeline: crawl → scrape → [fetch images] → post-process → build PDF.
 
-Orchestrates crawl.py, scrape.py, postprocess.py, and build_pdf.py in sequence,
-managing the working directory and passing arguments through.
+Orchestrates crawl.py, scrape.py, fetch_images.py (optional), postprocess.py,
+and build_pdf.py in sequence, managing the working directory and passing arguments.
 
 Usage:
     python run_all.py --url https://example.com --output book.pdf
@@ -12,6 +12,7 @@ Usage:
         --target-pages 100 \\
         --max-depth 4 \\
         --output example-docs.pdf \\
+        --keep-images \\
         --work-dir /tmp/write-book-example
 
 Note: After crawling, run_all.py prints the URL list so you can inspect it
@@ -68,6 +69,20 @@ def main():
         help="Keep external link URLs in scraped content (default: strip, keep link text only)"
     )
     parser.add_argument(
+        "--keep-images", action="store_true",
+        help="Preserve image references in scraped content and run fetch_images.py "
+             "to download and filter valuable images (diagrams, screenshots, figures). "
+             "Requires the user to have confirmed image inclusion in Phase 0."
+    )
+    parser.add_argument(
+        "--min-width", type=int, default=200,
+        help="Minimum image width in pixels when --keep-images is set (default: 200)"
+    )
+    parser.add_argument(
+        "--max-image-size-mb", type=float, default=5.0,
+        help="Maximum image file size in MB when --keep-images is set (default: 5.0)"
+    )
+    parser.add_argument(
         "--min-words", type=int, default=150,
         help="Minimum word count for a page to be included (default: 150)"
     )
@@ -118,7 +133,7 @@ def main():
     )
     parser.add_argument(
         "--auto-preface", action="store_true", default=False,
-        help="Generate a generic auto preface page (default OFF — write your own preface instead)"
+        help="Generate a minimal placeholder preface page (default OFF — write your own preface instead)"
     )
     args = parser.parse_args()
 
@@ -127,6 +142,7 @@ def main():
     work.mkdir(parents=True, exist_ok=True)
     sitemap = work / "sitemap.json"
     pages_dir = work / "pages"
+    images_dir = work / "images"
     template = args.template or str(here.parent / "templates" / "book.html")
     css = args.css or str(here.parent / "assets" / "book.css")
 
@@ -156,7 +172,7 @@ def main():
         crawl_cmd.append("--no-verify-ssl")
     if args.no_robots:
         crawl_cmd.append("--no-robots")
-    run(crawl_cmd, "Step 1/4: Crawl site")
+    run(crawl_cmd, "Step 1/5: Crawl site")
 
     # Print URL list after crawl so you can spot junk before scraping
     print("\n  Crawled URL list (inspect for noise before scraping):")
@@ -190,13 +206,36 @@ def main():
         scrape_cmd.append("--no-verify-ssl")
     if args.keep_external_links:
         scrape_cmd.append("--keep-external-links")
+    if args.keep_images:
+        scrape_cmd.append("--keep-images")
     if args.exclude:
         scrape_cmd += ["--exclude", args.exclude]
     if args.no_builtin_excludes:
         scrape_cmd.append("--no-builtin-excludes")
-    run(scrape_cmd, "Step 2/4: Scrape content")
+    run(scrape_cmd, "Step 2/5: Scrape content")
 
-    # Step 3: Post-process
+    # Step 3: Fetch and filter images (only when --keep-images requested)
+    step_num = 3
+    if args.keep_images:
+        fetch_cmd = [
+            sys.executable, str(here / "fetch_images.py"),
+            "--pages-dir", str(pages_dir),
+            "--images-dir", str(images_dir),
+            "--root-url", args.url,
+            "--min-width", str(args.min_width),
+            "--max-size-mb", str(args.max_image_size_mb),
+            "--delay", str(args.delay),
+        ]
+        if args.no_verify_ssl:
+            fetch_cmd.append("--no-verify-ssl")
+        run(fetch_cmd, f"Step 3/5: Fetch and filter images")
+        print(f"\n  Review {images_dir}/_manifest.json to verify only valuable images were kept.")
+        step_num = 4
+    else:
+        step_num = 3
+
+    # Step 4 (or 3): Post-process
+    total_steps = 5 if args.keep_images else 4
     postprocess_cmd = [
         sys.executable, str(here / "postprocess.py"),
         "--pages-dir", str(pages_dir),
@@ -212,9 +251,10 @@ def main():
         postprocess_cmd.append("--url-to-footnotes")
     if args.strip_ctas:
         postprocess_cmd.append("--strip-ctas")
-    run(postprocess_cmd, "Step 3/4: Post-process and clean")
+    run(postprocess_cmd, f"Step {step_num}/{total_steps}: Post-process and clean")
+    step_num += 1
 
-    # Step 4: Build PDF
+    # Step 5 (or 4): Build PDF
     build_cmd = [
         sys.executable, str(here / "build_pdf.py"),
         "--sitemap", str(sitemap),
@@ -236,10 +276,15 @@ def main():
         build_cmd.append("--no-index")
     if args.auto_preface:
         build_cmd.append("--auto-preface")
-    run(build_cmd, "Step 4/4: Build PDF")
+    if args.keep_images:
+        # Pass base URL so WeasyPrint can resolve local image paths
+        build_cmd += ["--base-url", pages_dir.resolve().as_uri()]
+    run(build_cmd, f"Step {step_num}/{total_steps}: Build PDF")
 
     print(f"\nAll done! Book written to: {args.output}")
     print(f"Inspect the .html output at {Path(args.output).with_suffix('.html')} before distributing.")
+    print(f"\nIMPORTANT: Review the HTML for any meta-commentary about scraping or assembly.")
+    print(f"No such text should appear in the final book.")
 
 
 if __name__ == "__main__":
