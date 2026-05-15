@@ -1,0 +1,310 @@
+/* ═══════════════════════════════════════════════════════
+   write-book — PDF Book Stylesheet
+   Works with WeasyPrint and pdfkit / wkhtmltopdf.
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Page setup (WeasyPrint / CSS Paged Media) ── */
+@page {
+  size: A4;
+  margin: 2.5cm 2.5cm 3cm 2.5cm;
+
+  @bottom-center {
+    content: counter(page);
+    font-family: Georgia, serif;
+    font-size: 10pt;
+    color: #666;
+  }
+
+  @top-center {
+    content: string(chapter-title);
+    font-family: Georgia, serif;
+    font-size: 9pt;
+    color: #999;
+  }
+}
+
+@page :first {
+  @bottom-center { content: none; }
+  @top-center    { content: none; }
+}
+
+/* ── Typography ── */
+html, body {
+  font-family: Georgia, "Times New Roman", Times, serif;
+  font-size: 11pt;
+  line-height: 1.7;
+  color: #1a1a1a;
+  background: #fff;
+}
+
+/* ── Title page ── */
+.title-page {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  min-height: 85vh;
+  padding: 4cm 2cm;
+}
+
+.title-page .book-title {
+  font-size: 28pt;
+  font-weight: bold;
+  color: #111;
+  margin-bottom: 1.5cm;
+  border: none;
+  padding: 0;
+}
+
+.title-page .book-source {
+  font-size: 11pt;
+  color: #555;
+  margin: 0.3cm 0;
+}
+
+.title-page .book-date {
+  font-size: 10pt;
+  color: #888;
+  margin-top: 0.5cm;
+}
+
+/* ── Page breaks ── */
+.page-break {
+  page-break-after: always;
+  break-after: page;
+}
+
+/* ── Table of Contents ── */
+#toc {
+  page-break-after: always;
+  break-after: page;
+  padding: 1cm 0;
+}
+
+#toc h2 {
+  font-size: 18pt;
+  border-bottom: 2px solid #333;
+  padding-bottom: 0.4cm;
+  margin-bottom: 0.8cm;
+}
+
+.toc-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.toc-list li {
+  padding: 0.15cm 0;
+  font-size: 10.5pt;
+  line-height: 1.4;
+  border-bottom: 1px dotted #ccc;
+}
+
+.toc-list li a {
+  color: #1a1a1a;
+  text-decoration: none;
+}
+
+.toc-depth-0 { padding-left: 0;    font-weight: bold; }
+.toc-depth-1 { padding-left: 0.5cm; }
+.toc-depth-2 { padding-left: 1.0cm; font-size: 10pt; color: #444; }
+.toc-depth-3 { padding-left: 1.5cm; font-size: 9.5pt; color: #666; }
+.toc-depth-4 { padding-left: 2.0cm; font-size: 9pt;   color: #888; }
+
+/* ── Chapter / section ── */
+.chapter {
+  page-break-before: always;
+  break-before: page;
+  padding-top: 0.5cm;
+}
+
+.chapter:first-child {
+  page-break-before: avoid;
+}
+
+/* ── Headings ── */
+h1 {
+  font-size: 22pt;
+  color: #111;
+  margin: 0 0 0.6cm 0;
+  padding-bottom: 0.3cm;
+  border-bottom: 2px solid #333;
+  string-set: chapter-title content();
+  page-break-after: avoid;
+}
+
+h2 {
+  font-size: 16pt;
+  color: #222;
+  margin: 0.8cm 0 0.4cm 0;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 0.15cm;
+  page-break-after: avoid;
+}
+
+h3 {
+  font-size: 13pt;
+  color: #333;
+  margin: 0.6cm 0 0.3cm 0;
+  page-break-after: avoid;
+}
+
+h4, h5, h6 {
+  font-size: 11.5pt;
+  color: #444;
+  margin: 0.5cm 0 0.25cm 0;
+  page-break-after: avoid;
+}
+
+/* ── Paragraphs ── */
+p {
+  margin: 0 0 0.5cm 0;
+  orphans: 3;
+  widows: 3;
+  text-align: justify;
+  hyphens: auto;
+}
+
+/* ── Links ── */
+a {
+  color: #1a56db;
+  text-decoration: none;
+}
+
+a:after {
+  content: " (" attr(href) ")";
+  font-size: 8pt;
+  color: #888;
+}
+
+/* Suppress URL display for anchors (internal links) */
+a[href^="#"]:after {
+  content: none;
+}
+
+/* ── Lists ── */
+ul, ol {
+  margin: 0.3cm 0 0.5cm 1.2cm;
+  padding: 0;
+}
+
+li {
+  margin-bottom: 0.15cm;
+}
+
+li > ul, li > ol {
+  margin-top: 0.1cm;
+  margin-bottom: 0.1cm;
+}
+
+/* ── Blockquotes ── */
+blockquote {
+  margin: 0.5cm 0 0.5cm 0.8cm;
+  padding: 0.3cm 0.6cm;
+  border-left: 4px solid #bbb;
+  color: #555;
+  font-style: italic;
+  background: #f9f9f9;
+}
+
+blockquote p {
+  margin: 0;
+}
+
+/* ── Code ── */
+code {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 9pt;
+  background: #f4f4f4;
+  padding: 0.05cm 0.2cm;
+  border-radius: 2px;
+  color: #c7254e;
+}
+
+pre {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 8.5pt;
+  background: #f6f8fa;
+  border: 1px solid #ddd;
+  border-left: 4px solid #6e40c9;
+  padding: 0.4cm 0.6cm;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0.4cm 0 0.6cm 0;
+  page-break-inside: avoid;
+  line-height: 1.45;
+}
+
+pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+}
+
+/* Syntax highlight (Pygments "default" theme subset) */
+.highlight .k  { color: #008000; font-weight: bold; }
+.highlight .kd { color: #008000; font-weight: bold; }
+.highlight .s  { color: #ba2121; }
+.highlight .s1 { color: #ba2121; }
+.highlight .s2 { color: #ba2121; }
+.highlight .c  { color: #408080; font-style: italic; }
+.highlight .c1 { color: #408080; font-style: italic; }
+.highlight .n  { color: #000; }
+.highlight .o  { color: #666; }
+.highlight .mi { color: #666; }
+.highlight .mf { color: #666; }
+.highlight .nn { color: #00f; }
+.highlight .nf { color: #06f; }
+.highlight .na { color: #7d9029; }
+
+/* ── Tables ── */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5cm 0 0.7cm 0;
+  font-size: 10pt;
+  page-break-inside: avoid;
+}
+
+th {
+  background: #2d3748;
+  color: #fff;
+  padding: 0.2cm 0.4cm;
+  text-align: left;
+  font-weight: bold;
+}
+
+td {
+  padding: 0.15cm 0.4cm;
+  border-bottom: 1px solid #ddd;
+  vertical-align: top;
+}
+
+tr:nth-child(even) td {
+  background: #f7f7f7;
+}
+
+/* ── Horizontal rule ── */
+hr {
+  border: none;
+  border-top: 1px solid #ddd;
+  margin: 0.6cm 0;
+}
+
+/* ── Images ── */
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0.4cm auto;
+}
+
+/* ── Source line (italics under chapter title) ── */
+em:first-of-type {
+  color: #777;
+  font-size: 9pt;
+}
