@@ -13,6 +13,9 @@ Usage:
         --max-depth 4 \\
         --output example-docs.pdf \\
         --work-dir /tmp/write-book-example
+
+Note: After crawling, run_all.py prints the URL list so you can inspect it
+for junk before scraping proceeds. Use --inspect-urls to print and pause.
 """
 
 import argparse
@@ -46,8 +49,12 @@ def main():
     parser.add_argument("--max-pages", type=int, default=0,
                         help="Hard cap on crawled pages (overrides target-pages calculation if set)")
     parser.add_argument("--include", default=None, help="URL include regex")
-    parser.add_argument("--exclude", default=None,
-                        help="URL exclude regex applied to both crawl and scrape steps")
+    parser.add_argument(
+        "--exclude", default=None,
+        help="URL exclude regex applied to both crawl and scrape steps. "
+             "Always include legal/account noise: "
+             "'(privacy|terms|legal|gdpr|cookies|imprint|about|sale|cart|signup|login)'"
+    )
     parser.add_argument("--main-selector", default=None, help="CSS selector for main content")
     parser.add_argument("--delay", type=float, default=0.25, help="Seconds between requests")
     parser.add_argument("--no-verify-ssl", action="store_true")
@@ -69,8 +76,8 @@ def main():
         help="Maximum depth shown in table of contents (default: 3)"
     )
     parser.add_argument(
-        "--toc-max-entries", type=int, default=500,
-        help="Maximum entries in table of contents (default: 500)"
+        "--toc-max-entries", type=int, default=300,
+        help="Maximum entries in table of contents (default: 300)"
     )
     parser.add_argument(
         "--running-header", default="",
@@ -82,7 +89,7 @@ def main():
     )
     parser.add_argument(
         "--no-builtin-excludes", action="store_true",
-        help="Disable scraper's built-in e-commerce/testimonial/forum URL exclusions"
+        help="Disable scraper's built-in URL exclusions (e-commerce, legal, testimonial, forum, auth)"
     )
     # Post-processing flags
     parser.add_argument(
@@ -104,6 +111,14 @@ def main():
     parser.add_argument(
         "--url-to-footnotes", action="store_true",
         help="Convert bare inline URLs to Markdown footnotes"
+    )
+    parser.add_argument(
+        "--strip-ctas", action="store_true",
+        help="Strip residual CTA/upsell patterns (second pass after scrape.py)"
+    )
+    parser.add_argument(
+        "--auto-preface", action="store_true", default=False,
+        help="Generate a generic auto preface page (default OFF — write your own preface instead)"
     )
     args = parser.parse_args()
 
@@ -143,6 +158,24 @@ def main():
         crawl_cmd.append("--no-robots")
     run(crawl_cmd, "Step 1/4: Crawl site")
 
+    # Print URL list after crawl so you can spot junk before scraping
+    print("\n  Crawled URL list (inspect for noise before scraping):")
+    print("  " + "-" * 58)
+    try:
+        import json
+        data = json.loads(sitemap.read_text())
+        for p in data.get("pages", [])[:50]:
+            print(f"  {p['depth']:>2}  {p['url']}")
+        total = len(data.get("pages", []))
+        if total > 50:
+            print(f"  ... and {total - 50} more. See {sitemap} for full list.")
+        print()
+        print("  Tip: if you see privacy|terms|legal|gdpr|about|login|signup pages above,")
+        print("  add them to --exclude and re-run. Scraping noise is slower to fix later.")
+    except Exception:
+        pass
+    print("  " + "-" * 58)
+
     # Step 2: Scrape
     scrape_cmd = [
         sys.executable, str(here / "scrape.py"),
@@ -177,6 +210,8 @@ def main():
         postprocess_cmd.append("--move-code-appendix")
     if args.url_to_footnotes:
         postprocess_cmd.append("--url-to-footnotes")
+    if args.strip_ctas:
+        postprocess_cmd.append("--strip-ctas")
     run(postprocess_cmd, "Step 3/4: Post-process and clean")
 
     # Step 4: Build PDF
@@ -199,9 +234,12 @@ def main():
         build_cmd += ["--running-header", args.running_header]
     if args.no_index:
         build_cmd.append("--no-index")
+    if args.auto_preface:
+        build_cmd.append("--auto-preface")
     run(build_cmd, "Step 4/4: Build PDF")
 
     print(f"\nAll done! Book written to: {args.output}")
+    print(f"Inspect the .html output at {Path(args.output).with_suffix('.html')} before distributing.")
 
 
 if __name__ == "__main__":
