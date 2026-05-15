@@ -6,6 +6,10 @@ Reads the page index produced by scrape.py and the sitemap from crawl.py,
 renders each page to HTML using the book template, then converts to PDF
 via WeasyPrint (primary) or pdfkit (fallback).
 
+The table of contents is kept concise: only top-level chapters (depth 0–1)
+are shown, capped at --toc-max-entries. If --target-pages is set, pages are
+trimmed to low-value content to approach that approximate PDF page count.
+
 Usage:
     python build_pdf.py \
         --sitemap crawl_output/sitemap.json \
@@ -13,7 +17,8 @@ Usage:
         --template templates/book.html \
         --css assets/book.css \
         --output book.pdf \
-        --title "My Book"
+        --title "My Book" \
+        --target-pages 100
 """
 
 import argparse
@@ -58,24 +63,41 @@ def md_to_html(text: str) -> tuple[str, str]:
     return html, title
 
 
-def build_toc_html(pages_meta: list[dict]) -> str:
-    """Build an HTML table of contents from page metadata."""
+def build_toc_html(
+    pages_meta: list[dict],
+    max_depth: int = 1,
+    max_entries: int = 30,
+) -> str:
+    """Build a concise HTML table of contents.
+
+    Only pages at depth <= max_depth are listed, and no more than max_entries
+    total. This keeps the TOC short and navigable rather than exhaustive.
+    """
     lines = ["<nav id='toc'><h2>Table of Contents</h2><ol class='toc-list'>"]
+    count = 0
     for i, meta in enumerate(pages_meta):
-        title = meta.get("title") or f"Page {i + 1}"
-        anchor = f"page-{i}"
+        if count >= max_entries:
+            break
         depth = meta.get("depth", 0)
+        if depth > max_depth:
+            continue
+        title = meta.get("title") or f"Chapter {count + 1}"
+        # Escape HTML special characters in title
+        title = title.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        anchor = f"page-{i}"
         indent_class = f"toc-depth-{min(depth, 4)}"
         lines.append(f"<li class='{indent_class}'><a href='#{anchor}'>{title}</a></li>")
+        count += 1
     lines.append("</ol></nav>")
     return "\n".join(lines)
 
 
 def build_title_page(title: str, root_url: str, date: str) -> str:
+    safe_title = title.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     return f"""
 <div id="title-page" class="title-page">
-  <h1 class="book-title">{title}</h1>
-  <p class="book-source">Source: <a href="{root_url}">{root_url}</a></p>
+  <h1 class="book-title">{safe_title}</h1>
+  <p class="book-source">Source: {root_url}</p>
   <p class="book-date">Generated: {date}</p>
 </div>
 <div class="page-break"></div>
@@ -105,16 +127,53 @@ def load_css(css_path: Path) -> str:
     return ""
 
 
+def filter_to_target_pages(pages_data: list[dict], target_pages: int) -> list[dict]:
+    """Trim pages to approximate the target PDF page count.
+
+    A rough heuristic: 1 PDF page ≈ 500 words of content. Keep the most
+    content-rich pages up to the word budget, then restore original order.
+    """
+    words_budget = target_pages * 500
+    total_words = sum(p.get("word_count", len(p["content"].split())) for p in pages_data)
+
+    if total_words <= words_budget:
+        return pages_data  # already within budget
+
+    # Tag each page with its original position and estimated word count
+    tagged = []
+    for idx, page in enumerate(pages_data):
+        wc = page.get("word_count") or len(page["content"].split())
+        tagged.append((idx, wc, page))
+
+    # Sort by word count descending (richest content first), then take until budget
+    tagged.sort(key=lambda t: -t[1])
+    kept_indices = set()
+    running = 0
+    for idx, wc, _ in tagged:
+        if running + wc > words_budget * 1.1:  # 10% tolerance
+            break
+        kept_indices.add(idx)
+        running += wc
+
+    # Restore original order
+    result = [page for idx, _, page in sorted(tagged, key=lambda t: t[0]) if idx in kept_indices]
+    print(f"  target-pages filter: kept {len(result)}/{len(pages_data)} pages "
+          f"(~{running // 500} estimated PDF pages)")
+    return result
+
+
 def render_full_html(
     title: str,
     root_url: str,
     pages_data: list[dict],
     template: str,
     css: str,
+    toc_max_depth: int = 1,
+    toc_max_entries: int = 30,
 ) -> str:
     date_str = datetime.now().strftime("%B %d, %Y")
     parts = [build_title_page(title, root_url, date_str)]
-    toc_html = build_toc_html(pages_data)
+    toc_html = build_toc_html(pages_data, max_depth=toc_max_depth, max_entries=toc_max_entries)
     parts.append(toc_html)
     parts.append('<div class="page-break"></div>')
 
@@ -130,7 +189,8 @@ def render_full_html(
         parts.append(chapter)
 
     body = "\n".join(parts)
-    full_html = template.replace("{{BOOK_TITLE}}", title)
+    safe_title = title.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    full_html = template.replace("{{BOOK_TITLE}}", safe_title)
     full_html = full_html.replace("{{CSS}}", css)
     full_html = full_html.replace("{{BODY}}", body)
     return full_html
@@ -179,6 +239,18 @@ def main():
     parser.add_argument("--title", default="", help="Book title (defaults to site title from sitemap)")
     parser.add_argument("--backend", choices=["weasyprint", "pdfkit", "auto"], default="auto")
     parser.add_argument("--html-only", action="store_true", help="Output HTML only, skip PDF rendering")
+    parser.add_argument(
+        "--target-pages", type=int, default=0,
+        help="Approximate target PDF page count. Trims low-value pages to approach this count."
+    )
+    parser.add_argument(
+        "--toc-max-depth", type=int, default=1,
+        help="Maximum chapter depth shown in the table of contents (default: 1)"
+    )
+    parser.add_argument(
+        "--toc-max-entries", type=int, default=30,
+        help="Maximum number of entries in the table of contents (default: 30)"
+    )
     args = parser.parse_args()
 
     sitemap_path = Path(args.sitemap)
@@ -204,7 +276,7 @@ def main():
     print(f"Assembling book from {len(index)} pages...")
 
     pages_data = []
-    for record in index:
+    for i, record in enumerate(index):
         if record.get("error"):
             continue
         md_file = pages_dir / record["filename"]
@@ -215,15 +287,25 @@ def main():
             "title": record.get("title", ""),
             "depth": record.get("depth", 0),
             "url": record.get("url", ""),
+            "word_count": record.get("word_count", 0),
             "content": content,
+            "_original_index": i,
         })
 
     print(f"  {len(pages_data)} pages with content (skipped {len(index) - len(pages_data)} errors/missing)")
 
+    # Apply target-pages filtering if requested
+    if args.target_pages > 0:
+        pages_data = filter_to_target_pages(pages_data, args.target_pages)
+
     template = load_template(template_path)
     css = load_css(css_path)
 
-    html = render_full_html(book_title, root_url, pages_data, template, css)
+    html = render_full_html(
+        book_title, root_url, pages_data, template, css,
+        toc_max_depth=args.toc_max_depth,
+        toc_max_entries=args.toc_max_entries,
+    )
 
     html_path = output_path.with_suffix(".html")
     html_path.write_text(html, encoding="utf-8")
