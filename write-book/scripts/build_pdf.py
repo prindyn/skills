@@ -15,12 +15,17 @@ Key features:
   - Cross-references from appendix pages back to their main chapter
   - URL footnote rendering via Python-Markdown footnotes extension
   - No double page-breaks: section breaks use page-break-before only
+  - Local image path resolution for images downloaded by fetch_images.py
 
 Page-break strategy (avoids blank pages):
   Every section element uses CSS page-break-before: always.
   Do NOT add <div class="page-break"> between sections — that stacks two
   consecutive breaks and creates blank pages. The .page-break div is reserved
   for transitions where the following element has no page-break-before rule.
+
+IMPORTANT: Always pass --no-auto-preface and write your own Preface as a .md file.
+The auto-preface is off by default. If you enable it, ensure it contains no
+meta-commentary about scraping, crawling, or PDF generation.
 
 Usage:
     python build_pdf.py \\
@@ -211,7 +216,7 @@ def build_title_page(title: str, root_url: str, date: str, running_header: str) 
     return f"""
 <div id="title-page" class="title-page">
   <h1 class="book-title">{safe_title}</h1>
-  <p class="book-date">Generated: {date}</p>
+  <p class="book-date">{date}</p>
   <!-- running-header meta consumed by CSS string-set -->
   <span class="running-header-value" style="display:none">{safe_header}</span>
 </div>
@@ -219,22 +224,24 @@ def build_title_page(title: str, root_url: str, date: str, running_header: str) 
 
 
 def build_auto_preface_html(title: str) -> str:
-    """Generate a generic preface page (opt-in only, via --auto-preface).
+    """Generate a minimal placeholder preface (opt-in only, via --auto-preface).
 
-    Prefer writing a real preface as a .md file in the pages directory.
-    A real preface states audience, scope, and how to read the book.
-    Use --auto-preface only if you truly want no preface at all but need
-    a placeholder for formatting purposes.
+    STRONGLY PREFER writing a real Preface as a .md file in the pages directory
+    and passing --no-auto-preface (the default). A real preface speaks directly
+    to the reader about audience, scope, and how to use the book.
+
+    This placeholder contains no meta-commentary about scraping or assembly.
     """
     safe = title.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     return f"""
 <section id="auto-preface" class="chapter">
 <h1>Preface</h1>
-<p>This document is a compiled edition of <em>{safe}</em>, assembled for offline reading.
-Content has been organized thematically for a reading experience rather than following
-the original site navigation order.</p>
-<p>Cross-references point to chapter and section titles within this document.
-Source URLs are available in the online edition.</p>
+<p>This book brings together material on <em>{safe}</em>, organized for
+a reader working through the subject in depth. Foundational concepts appear
+before advanced applications. The appendix contains extended code listings
+cross-referenced from their relevant chapters.</p>
+<p>Use the table of contents for navigating by topic, and the index at the back
+for locating specific terms and techniques.</p>
 </section>
 """
 
@@ -346,7 +353,7 @@ def render_full_html(
     parts = [build_title_page(title, root_url, date_str, effective_header)]
 
     # Auto-preface: only when explicitly requested AND no preface page is in content.
-    # Prefer a user-written preface .md file included as the first chapter.
+    # Always prefer a user-written preface .md file as the first chapter.
     if include_auto_preface:
         has_preface = any(
             re.search(r'\bpreface\b|\bintroduction\b|\bintro\b', p.get("title", ""), re.IGNORECASE)
@@ -386,8 +393,7 @@ def render_full_html(
 
         appendix_intro = (
             "<p>The following pages contain extended code listings. "
-            "They are gathered here rather than interspersed in the main text "
-            "to preserve reading flow.</p>"
+            "They are gathered here to preserve the reading flow of the main chapters.</p>"
         )
         if main_chapter_names:
             chapter_list = ", ".join(
@@ -435,10 +441,11 @@ def render_full_html(
     return full_html
 
 
-def render_pdf_weasyprint(html: str, output_path: Path):
+def render_pdf_weasyprint(html: str, output_path: Path, base_url: str | None = None):
     try:
         from weasyprint import HTML, CSS
-        HTML(string=html).write_pdf(str(output_path))
+        html_obj = HTML(string=html, base_url=base_url)
+        html_obj.write_pdf(str(output_path))
         return True
     except ImportError:
         return False
@@ -511,9 +518,20 @@ def main():
         help="Text used as the running header on every page. Defaults to --title."
     )
     parser.add_argument(
+        "--no-auto-preface", action="store_true", default=False,
+        help="(Kept for backwards compatibility — auto-preface is already OFF by default. "
+             "Always prefer a user-written preface .md file.)"
+    )
+    parser.add_argument(
         "--auto-preface", action="store_true", default=False,
-        help="Generate a generic auto preface if no preface page is found in content. "
-             "Default OFF — write your own preface as a .md file instead."
+        help="Generate a minimal placeholder preface if no preface page is found in content. "
+             "Default OFF — write your own preface as a .md file instead. "
+             "The generated preface contains no meta-commentary about scraping."
+    )
+    parser.add_argument(
+        "--base-url", default="",
+        help="Base URL for resolving local image paths in WeasyPrint. "
+             "Set to the pages-dir absolute path for local image references."
     )
     args = parser.parse_args()
 
@@ -536,6 +554,9 @@ def main():
     index = json.loads(index_path.read_text())
     root_url = sitemap.get("root_url", "")
     book_title = args.title or sitemap.get("root_url", "Website Book")
+
+    # Use pages_dir as base URL for WeasyPrint so local image paths resolve correctly
+    base_url = args.base_url or pages_dir.resolve().as_uri()
 
     print(f"Assembling book from {len(index)} pages...")
 
@@ -596,6 +617,7 @@ def main():
     print(f"  HTML written: {html_path} ({html_path.stat().st_size // 1024} KB)")
     print(f"\n  Inspect the HTML before building the PDF:")
     print(f"  Open {html_path} and check for blank pages, raw URLs, noise in the first few chapters.")
+    print(f"  Also verify: no meta-commentary about scraping or assembly appears anywhere.")
 
     if args.html_only:
         print("Done (HTML only mode).")
@@ -606,7 +628,7 @@ def main():
     success = False
     if args.backend in ("weasyprint", "auto"):
         print("  Rendering PDF via WeasyPrint...")
-        success = render_pdf_weasyprint(html, output_path)
+        success = render_pdf_weasyprint(html, output_path, base_url=base_url)
 
     if not success and args.backend in ("pdfkit", "auto"):
         print("  WeasyPrint unavailable or failed, trying pdfkit...")
